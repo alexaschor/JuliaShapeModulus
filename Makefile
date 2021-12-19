@@ -1,5 +1,5 @@
-CXX=g++
-CXXFLAGS=-g -Wall -MMD -std=c++11
+CXX=g++-9
+CXXFLAGS=-g -Wall -MMD -std=c++11 -O3 -fopenmp
 
 SOURCES := $(wildcard *.cpp)
 OBJECTS := $(patsubst %.cpp,%.o,$(SOURCES))
