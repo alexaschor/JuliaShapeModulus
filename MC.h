@@ -34,7 +34,6 @@ namespace MC
         return VEC3F(l.x() - r.x(), l.y() - r.y(), l.z() - r.z());
     }
 
-    void marching_cube(Field3D& field, Mesh& outputMesh);
     void setDefaultArraySizes(uint vertSize, uint normSize, uint triSize);
 }
 
@@ -43,7 +42,6 @@ namespace MC
 
 namespace MC
 {
-#ifdef MC_IMPLEM_ENABLE
     static uint defaultVerticeArraySize  = 100000;
     static uint defaultNormalArraySize   = 100000;
     static uint defaultTriangleArraySize = 400000;
@@ -136,12 +134,37 @@ namespace MC
       \param x, y, z current slab index
       \param size slab indices array size
       */
-    static void mc_internalComputeEdge(VEC3I* slab_inds, Mesh& mesh, float va, float vb, int axis, uint x, uint y, uint z, const VEC3I& size)
+    static void mc_internalComputeEdge(VEC3I* slab_inds, Mesh& mesh, Grid3D* grid, float va, float vb, int axis, uint x, uint y, uint z, const VEC3I& size)
     {
         if ((va < 0.0) == (vb < 0.0))
             return;
-        VEC3F v = VEC3F(Real(x), Real(y), Real(z));
-        v[axis] += va / (va - vb);
+
+
+        VEC3F offset(0,0,0);
+
+        if (grid->supportsNonIntegerIndices) { // Do a root-finding pass if we can
+            double l_bound = (va>0)?0:1;
+            double r_bound = (va>0)?1:0;
+
+            for(int i = 0; i < MC_MAX_ROOTFINDING_ITERATIONS; ++i) {
+                offset[axis] = 0.5 * (l_bound + r_bound);
+                VEC3F samplePoint = VEC3F(x,y,z) + offset;
+                const Real val = grid->getf(samplePoint);
+
+                if (fabs(val) < MC_ROOTFINDING_THRESH) break;
+
+                if(val < 0) {
+                    r_bound = offset[axis];
+                } else {
+                    l_bound = offset[axis];
+                }
+            }
+
+        }
+
+
+        VEC3F v = VEC3F(x, y, z) + offset;
+        // v[axis] += va / (va - vb);
         slab_inds[mc_internalToIndex1DSlab(x, y, z, size)][axis] = uint(mesh.vertices.size());
         mesh.vertices.push_back(v);
         mesh.normals.push_back(VEC3F(0, 0, 0));
@@ -181,41 +204,47 @@ namespace MC
     }
 
     /*!
-      \brief Computes the mesh representing the zero isosurface of a 3D scalarfield and
+      \brief Computes the mesh representing the zero isosurface of a 3D scalar field and
       outputs it to an indexed mesh.
-      \param field Field3D scalar field of real values
+      \param grid Grid3D scalar field or function of real values
       \param outputMesh indexed mesh returned.
+      \param verbose if true, prints progress updates
       */
-    void marching_cube(Field3D& field, Mesh& outputMesh)
-    {
+    inline void march_cubes(Grid3D *grid, Mesh& outputMesh, bool verbose = false) {
 
-        Real* fieldArr = field.values;
-        uint nx = field.xRes;
-        uint ny = field.yRes;
-        uint nz = field.zRes;
+        uint nx = grid->xRes;
+        uint ny = grid->yRes;
+        uint nz = grid->zRes;
 
         outputMesh.vertices.reserve(defaultVerticeArraySize);
         outputMesh.normals.reserve(defaultNormalArraySize);
         outputMesh.indices.reserve(defaultTriangleArraySize);
 
+        if (verbose) {
+            printf("Marching cubes on a %d x %d x %d grid: 0.00%%", nx, ny, nz);
+            fflush(stdout);
+        }
+
         const VEC3I size(nx, ny, nz);
         VEC3I* slab_inds = new VEC3I[nx * ny * 2];
         Real vs[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
         uint edge_indices[12];
+
         for (uint z = 0; z < nz - 1; z++)
         {
             for (uint y = 0; y < ny - 1; y++)
             {
                 for (uint x = 0; x < nx - 1; x++)
                 {
-                    vs[0] = fieldArr[mc_internalToIndex1D(x, y, z, size)];
-                    vs[1] = fieldArr[mc_internalToIndex1D(x + 1, y, z, size)];
-                    vs[2] = fieldArr[mc_internalToIndex1D(x, y + 1, z, size)];
-                    vs[3] = fieldArr[mc_internalToIndex1D(x + 1, y + 1, z, size)];
-                    vs[4] = fieldArr[mc_internalToIndex1D(x, y, z + 1, size)];
-                    vs[5] = fieldArr[mc_internalToIndex1D(x + 1, y, z + 1, size)];
-                    vs[6] = fieldArr[mc_internalToIndex1D(x, y + 1, z + 1, size)];
-                    vs[7] = fieldArr[mc_internalToIndex1D(x + 1, y + 1, z + 1, size)];
+
+                    vs[0] = grid->get(x, y, z);
+                    vs[1] = grid->get(x + 1, y, z);
+                    vs[2] = grid->get(x, y + 1, z);
+                    vs[3] = grid->get(x + 1, y + 1, z);
+                    vs[4] = grid->get(x, y, z + 1);
+                    vs[5] = grid->get(x + 1, y, z + 1);
+                    vs[6] = grid->get(x, y + 1, z + 1);
+                    vs[7] = grid->get(x + 1, y + 1, z + 1);
 
                     const int config_n =
                         ((vs[0] < 0) << 0) |
@@ -230,28 +259,28 @@ namespace MC
                         continue;
 
                     if (y == 0 && z == 0)
-                        mc_internalComputeEdge(slab_inds, outputMesh, vs[0], vs[1], 0, x, y, z, size);
+                        mc_internalComputeEdge(slab_inds, outputMesh, grid, vs[0], vs[1], 0, x, y, z, size);
                     if (z == 0)
-                        mc_internalComputeEdge(slab_inds, outputMesh, vs[2], vs[3], 0, x, y + 1, z, size);
+                        mc_internalComputeEdge(slab_inds, outputMesh, grid, vs[2], vs[3], 0, x, y + 1, z, size);
                     if (y == 0)
-                        mc_internalComputeEdge(slab_inds, outputMesh, vs[4], vs[5], 0, x, y, z + 1, size);
-                    mc_internalComputeEdge(slab_inds, outputMesh, vs[6], vs[7], 0, x, y + 1, z + 1, size);
+                        mc_internalComputeEdge(slab_inds, outputMesh, grid, vs[4], vs[5], 0, x, y, z + 1, size);
+                    mc_internalComputeEdge(slab_inds, outputMesh, grid, vs[6], vs[7], 0, x, y + 1, z + 1, size);
 
                     if (x == 0 && z == 0)
-                        mc_internalComputeEdge(slab_inds, outputMesh, vs[0], vs[2], 1, x, y, z, size);
+                        mc_internalComputeEdge(slab_inds, outputMesh, grid, vs[0], vs[2], 1, x, y, z, size);
                     if (z == 0)
-                        mc_internalComputeEdge(slab_inds, outputMesh, vs[1], vs[3], 1,x + 1, y, z, size);
+                        mc_internalComputeEdge(slab_inds, outputMesh, grid, vs[1], vs[3], 1,x + 1, y, z, size);
                     if (x == 0)
-                        mc_internalComputeEdge(slab_inds, outputMesh, vs[4], vs[6], 1, x, y, z + 1, size);
-                    mc_internalComputeEdge(slab_inds, outputMesh, vs[5], vs[7], 1, x + 1, y, z + 1, size);
+                        mc_internalComputeEdge(slab_inds, outputMesh, grid, vs[4], vs[6], 1, x, y, z + 1, size);
+                    mc_internalComputeEdge(slab_inds, outputMesh, grid, vs[5], vs[7], 1, x + 1, y, z + 1, size);
 
                     if (x == 0 && y == 0)
-                        mc_internalComputeEdge(slab_inds, outputMesh, vs[0], vs[4], 2, x, y, z, size);
+                        mc_internalComputeEdge(slab_inds, outputMesh, grid, vs[0], vs[4], 2, x, y, z, size);
                     if (y == 0)
-                        mc_internalComputeEdge(slab_inds, outputMesh, vs[1], vs[5], 2, x + 1, y, z, size);
+                        mc_internalComputeEdge(slab_inds, outputMesh, grid, vs[1], vs[5], 2, x + 1, y, z, size);
                     if (x == 0)
-                        mc_internalComputeEdge(slab_inds, outputMesh, vs[2], vs[6], 2, x, y + 1, z, size);
-                    mc_internalComputeEdge(slab_inds, outputMesh, vs[3], vs[7], 2, x + 1, y + 1, z, size);
+                        mc_internalComputeEdge(slab_inds, outputMesh, grid, vs[2], vs[6], 2, x, y + 1, z, size);
+                    mc_internalComputeEdge(slab_inds, outputMesh, grid, vs[3], vs[7], 2, x + 1, y + 1, z, size);
 
                     edge_indices[0] = slab_inds[mc_internalToIndex1DSlab(x, y, z, size)].x();
                     edge_indices[1] = slab_inds[mc_internalToIndex1DSlab(x, y + 1, z, size)].x();
@@ -286,11 +315,17 @@ namespace MC
                     }
                 }
             }
+
+            if (verbose) printf("\rMarching cubes on a %d x %d x %d grid: %.2f%%", nx, ny, nz, (float(z) / nz)*100);
+            fflush(stdout);
         }
+
+        if (verbose) printf("\n");
+
         for (size_t i = 0; i < outputMesh.normals.size(); i++)
             outputMesh.normals[i] = mc_internalNormalize(outputMesh.normals[i]);
+
         delete[] slab_inds;
     }
 
-#endif
 }
