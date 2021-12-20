@@ -1,6 +1,7 @@
 #ifndef MC_CPP_INCLUDED
 #define MC_CPP_INCLUDED
 
+#include <mutex>
 #include <vector>
 #include <cmath>
 
@@ -225,13 +226,13 @@ namespace MC
             fflush(stdout);
         }
 
-        const VEC3I size(nx, ny, nz);
-        VEC3I* slab_inds = new VEC3I[nx * ny * 2];
-        Real vs[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
-        uint edge_indices[12];
-
         for (uint z = 0; z < nz - 1; z++)
         {
+            const VEC3I size(nx, ny, nz);
+            VEC3I slab_inds[nx * ny * 2];
+            Real vs[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+            uint edge_indices[12];
+
             for (uint y = 0; y < ny - 1; y++)
             {
                 for (uint x = 0; x < nx - 1; x++)
@@ -264,6 +265,7 @@ namespace MC
                         mc_internalComputeEdge(slab_inds, outputMesh, grid, vs[2], vs[3], 0, x, y + 1, z, size);
                     if (y == 0)
                         mc_internalComputeEdge(slab_inds, outputMesh, grid, vs[4], vs[5], 0, x, y, z + 1, size);
+
                     mc_internalComputeEdge(slab_inds, outputMesh, grid, vs[6], vs[7], 0, x, y + 1, z + 1, size);
 
                     if (x == 0 && z == 0)
@@ -272,6 +274,7 @@ namespace MC
                         mc_internalComputeEdge(slab_inds, outputMesh, grid, vs[1], vs[3], 1,x + 1, y, z, size);
                     if (x == 0)
                         mc_internalComputeEdge(slab_inds, outputMesh, grid, vs[4], vs[6], 1, x, y, z + 1, size);
+
                     mc_internalComputeEdge(slab_inds, outputMesh, grid, vs[5], vs[7], 1, x + 1, y, z + 1, size);
 
                     if (x == 0 && y == 0)
@@ -280,6 +283,7 @@ namespace MC
                         mc_internalComputeEdge(slab_inds, outputMesh, grid, vs[1], vs[5], 2, x + 1, y, z, size);
                     if (x == 0)
                         mc_internalComputeEdge(slab_inds, outputMesh, grid, vs[2], vs[6], 2, x, y + 1, z, size);
+
                     mc_internalComputeEdge(slab_inds, outputMesh, grid, vs[3], vs[7], 2, x + 1, y + 1, z, size);
 
                     edge_indices[0] = slab_inds[mc_internalToIndex1DSlab(x, y, z, size)].x();
@@ -325,7 +329,6 @@ namespace MC
         for (size_t i = 0; i < outputMesh.normals.size(); i++)
             outputMesh.normals[i] = mc_internalNormalize(outputMesh.normals[i]);
 
-        delete[] slab_inds;
     }
 
 }

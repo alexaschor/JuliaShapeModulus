@@ -367,24 +367,32 @@ template<typename T> struct matrix_hash : unary_function<T, size_t> {
 
 class VirtualGrid3DCached: public VirtualGrid3D {
 protected:
-    unordered_map<VEC3F, Real, matrix_hash<VEC3F>> map;
+    mutable unordered_map<VEC3F, Real, matrix_hash<VEC3F>> map;
+
 public:
+    mutable int numQueries = 0;
+    mutable int numHits = 0;
+    mutable int numMisses = 0;
+
     using VirtualGrid3D::VirtualGrid3D;
 
-    virtual Real get(uint x, uint y, uint z) {
+    virtual Real get(uint x, uint y, uint z) const override {
         return getf(x,y,z);
     }
 
-    virtual Real getf(Real x, Real y, Real z) {
+    virtual Real getf(Real x, Real y, Real z) const override {
         VEC3F key(x,y,z);
+        numQueries++;
 
         auto search = map.find(key);
         if (search != map.end()) {
+            numHits++;
             return search->second;
         }
 
         Real result = VirtualGrid3D::get(x,y,z);
         map[key] = result;
+        numMisses++;
         return result;
     }
 
@@ -393,7 +401,7 @@ public:
 class VirtualGrid3DLimitedCache: public VirtualGrid3DCached {
 private:
     size_t maxSize;
-    queue<VEC3F> cacheQueue;
+    mutable queue<VEC3F> cacheQueue;
 
 public:
     // Instantiates a VirtualGrid3D with a limited-size cache. When additional
@@ -412,16 +420,21 @@ public:
             }
         }
 
-    virtual Real getf(Real x, Real y, Real z) override {
+    virtual Real get(uint x, uint y, uint z) const override {
+        return getf(x,y,z);
+    }
+
+    virtual Real getf(Real x, Real y, Real z) const override {
         VEC3F key(x,y,z);
+        numQueries++;
 
         auto search = map.find(key);
         if (search != map.end()) {
-            PRINT("CACHE HIT\n");
+            numHits++;
             return search->second;
         }
 
-        Real result = VirtualGrid3D::get(x,y,z);
+        Real result = VirtualGrid3D::getf(x,y,z);
         map[key] = result;
 
         if (cacheQueue.size() >= maxSize) {
@@ -431,7 +444,7 @@ public:
 
         cacheQueue.push(key);
 
-
+        numMisses++;
         return result;
     }
 };
