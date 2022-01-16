@@ -1,19 +1,28 @@
-CXX=g++-9
-CXXFLAGS=-g -Wall -MMD -std=c++11 -O3 -fopenmp
+all: fast
 
-SOURCES := $(wildcard *.cpp)
-OBJECTS := $(patsubst %.cpp,%.o,$(SOURCES))
-DEPENDS := $(patsubst %.cpp,%.d,$(SOURCES))
+CXX=g++-9
+CXXFLAGS=-Wall -MMD -std=c++11 -fopenmp -I./lib/
+
+SOURCES_SRC := $(wildcard src/*.cpp)
+SOURCES_LIB := $(wildcard lib/*/*.cpp)
+SOURCES := $(SOURCES_SRC) $(SOURCES_LIB)
+
+OBJECTS := $(patsubst %.cpp,build/%.o, $(SOURCES))
+DEPENDS := $(patsubst build/%.o,build/%.d,$(OBJECTS))
 
 # Warning level
 WARNING := -Wall -Wextra
 
 .PHONY: all clean
 
-all: run
+slow: CXXFLAGS += -g
+fast: CXXFLAGS += -O3 -g
+
+slow: run
+fast: run
 
 clean:
-	$(RM) $(OBJECTS) $(DEPENDS) run
+	rm -rf build run
 
 # Linking the executable from the object files
 run: $(OBJECTS)
@@ -21,5 +30,10 @@ run: $(OBJECTS)
 
 -include $(DEPENDS)
 
-%.o: %.cpp Makefile
+DIRGUARD := @mkdir -p $(dir $(DEPENDS) $(OBJECTS))
+
+build/%.o: %.cpp Makefile
+	$(DIRGUARD)
 	$(CXX) $(WARNING) $(CXXFLAGS) -MMD -MP -c $< -o $@
+
+
