@@ -17,49 +17,54 @@
 
 using namespace std;
 
-const Real ESCAPE = 20.0;
-const int MAX_ITERATIONS = 3;
-
 ArrayGrid3D* debugField;
 
 class ConstrainedRationalMap: public FieldFunction3D {
-private:
+//private:
+public:
     Grid3D* distanceField;
-    POLYNOMIAL_4D polynomial;
-    Real a, b;
+    POLYNOMIAL_4D topPolynomial;
+    bool hasBottomPolynomial;
+    POLYNOMIAL_4D bottomPolynomial;
+    Real c;
     int maxIterations;
     Real escape;
 
 public:
-    ConstrainedRationalMap(Grid3D* distanceField, POLYNOMIAL_4D polynomial, Real a = 2, Real b = 300, int maxIterations = 3, Real escape = 20):
-        distanceField(distanceField), polynomial(polynomial), a(a), b(b), maxIterations(maxIterations), escape(escape) {}
+    ConstrainedRationalMap(Grid3D* distanceField, POLYNOMIAL_4D topPolynomial, Real c = 300, int maxIterations = 3, Real escape = 20):
+        distanceField(distanceField), topPolynomial(topPolynomial), hasBottomPolynomial(false), c(c), maxIterations(maxIterations), escape(escape) {}
 
     Real getFieldValue(const VEC3F& pos) const override {
         QUATERNION iterate(pos[0], pos[1], pos[2], 0);
         Real magnitude = iterate.magnitude();
         int totalIterations = 0;
 
-        while (magnitude < ESCAPE && totalIterations < MAX_ITERATIONS) {
+        while (magnitude < escape && totalIterations < maxIterations) {
             // First lookup the radius we're going to project to and save the original
             const Real distance = (*distanceField)(VEC3F(iterate[0], iterate[1], iterate[2]));
-            Real radius = pow(a, b * distance);
+            Real radius = exp(c * distance);
 
             QUATERNION original = iterate;
 
             // Arbitrary: we define NAN as escaping
             if (isnan(radius)) {
-                magnitude = ESCAPE;
+                magnitude = escape;
                 break;
             }
 
             // If we know it'll escape we can skip quaternion multiplication evaluation
-            if (radius > ESCAPE) {
+            if (radius > escape) {
                 magnitude = radius;
                 totalIterations++;
                 break;
             }
 
-            iterate = polynomial.evaluate(iterate);
+            // iterate = topPolynomial.evaluate(iterate);
+            iterate = topPolynomial.evaluateScaledPowerFactored(iterate);
+            if (hasBottomPolynomial) {
+                QUATERNION bottomEval = bottomPolynomial.evaluateScaledPowerFactored(iterate);
+                iterate = (iterate / bottomEval);
+            }
 
             // If quaternion multiplication fails, revert back to original
             if (iterate.anyNans()) {
@@ -100,38 +105,49 @@ Real sphereFunction(VEC3F pos) {
 
 int main(int argc, char *argv[]) {
 
-    if(argc != 4) {
+    if(argc != 6) {
         cout << "USAGE: " << endl;
         cout << "To create a shaped Julia set from a distance field:" << endl;
-        cout << " " << argv[0] << " <distance field> <4D polynomial> <output OBJ>" << endl;
+        cout << " " << argv[0] << " <distance field> <4D top polynomial> <4D bottom polynomial, or NONE> <output resolution> <output OBJ>" << endl;
         exit(0);
     }
 
     ArrayGrid3D distFieldCoarse(argv[1]);
+
     InterpolationGrid distField(&distFieldCoarse, InterpolationGrid::LINEAR);
-
-    // distField.writeF3D("dfi.field3d", true);
-
     distField.mapBox.setCenter(VEC3F(0,0,0));
-
-    POLYNOMIAL_4D poly(argv[2]);
-
     PRINTF("Got distance field with res %dx%dx%d\n", distField.xRes, distField.yRes, distField.zRes);
 
-    ConstrainedRationalMap map(&distField, poly, 2, 300);
-    // FieldFunction3D map(sphereFunction);
+    PRINT("NOTE: Setting simulation bounds to hard-coded values");
+    distField.mapBox.max() = VEC3F(1.25, 1.25, 1.25);
+    distField.mapBox.min() = VEC3F(-1.25, -1.25, -1.25);
 
-    VirtualGrid3DLimitedCache vg(100, 100, 100, distField.mapBox.min(), distField.mapBox.max(), &map);
-    // ArrayGrid3D vg(300, 300, 300, distField.mapBox.min(), distField.mapBox.max(), &map);
 
-    // FieldFunction3D sf(&sphereFunction);
-    // VirtualGrid3DLimitedCache vg(300, 300, 300, VEC3F(-10, -10, -10), VEC3F(10,10,10), &sf);
-    // vg.writeF3D("sphere.field3d");
+    if (string(argv[3]) != "NONE") {
+        POLYNOMIAL_4D polyTop(argv[2]);
+        ConstrainedRationalMap map(&distField, polyTop, 100);
 
-    // vg.writeF3D("fieldOut.field3d");
-    Mesh m;
-    MC::march_cubes(&vg, m, true);
-    m.writeOBJ(argv[3]);
+        POLYNOMIAL_4D polyBottom(argv[3]);
+        map.hasBottomPolynomial = true;
+        map.bottomPolynomial = polyBottom;
+
+        int res = atoi(argv[4]);
+        VirtualGrid3DLimitedCache vg(res, res, res, distField.mapBox.min(), distField.mapBox.max(), &map);
+
+        Mesh m;
+        MC::march_cubes(&vg, m, true);
+        m.writeOBJ(argv[5]);
+    } else {
+        POLYNOMIAL_4D polyTop(argv[2]);
+        ConstrainedRationalMap map(&distField, polyTop, 100);
+
+        int res = atoi(argv[4]);
+        VirtualGrid3DLimitedCache vg(res, res, res, distField.mapBox.min(), distField.mapBox.max(), &map);
+
+        Mesh m;
+        MC::march_cubes(&vg, m, true);
+        m.writeOBJ(argv[5]);
+    }
 
     return 0;
 }

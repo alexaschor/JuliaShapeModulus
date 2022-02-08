@@ -226,7 +226,7 @@ namespace MC
         //     fflush(stdout);
         // }
 
-        PB_START("Marching cubes");
+        PB_START("Marching cubes with res %dx%dx%d", nx, ny, nz);
         PB_PROGRESS(0);
 
         for (uint z = 0; z < nz - 1; z++)
