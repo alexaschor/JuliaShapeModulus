@@ -229,10 +229,15 @@ namespace MC
         PB_START("Marching cubes with res %dx%dx%d", nx, ny, nz);
         PB_PROGRESS(0);
 
+        VEC3I* slab_inds = new VEC3I[nx * ny * 2];
+        for (uint i = 0; i < nx*ny*2; ++i) {
+            slab_inds[i] = VEC3I(0,0,0);
+        }
+
         for (uint z = 0; z < nz - 1; z++)
         {
             const VEC3I size(nx, ny, nz);
-            VEC3I* slab_inds = new VEC3I[nx * ny * 2];
+
             Real vs[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
             uint edge_indices[12];
 
@@ -324,13 +329,12 @@ namespace MC
                 }
             }
 
-            delete[] slab_inds;
-
-            // if (verbose) printf("\rMarching cubes on a %d x %d x %d grid: %.2f%%", nx, ny, nz, (float(z) / nz)*100);
             PB_PROGRESS((float) z / nz);
 
             fflush(stdout);
         }
+
+        delete[] slab_inds;
 
         PB_END();
 
