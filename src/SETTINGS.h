@@ -25,6 +25,7 @@ typedef VectorXd VECTOR;
 #define PRINTV3(v) if (DEBUGBOOL) fprintf(stderr, "%s:%d (%s)\t| %s={%.2e, %.2e, %.2e};\n", __FILE__, __LINE__, __func__, #v, (v)[0], (v)[1], (v)[2])
 #define PRINTV4(v) if (DEBUGBOOL) fprintf(stderr, "%s:%d (%s)\t| %s={%.2e, %.2e, %.2e, %.2e};\n", __FILE__, __LINE__, __func__, #v, (v)[0], (v)[1], (v)[2], (v)[3])
 #define PRINTD(x) if (DEBUGBOOL) fprintf(stderr, "%s:%d (%s)\t| %s=%f;\n", __FILE__, __LINE__, __func__, #x, x)
+#define PRINTE(x) if (DEBUGBOOL) fprintf(stderr, "%s:%d (%s)\t| %s=%e;\n", __FILE__, __LINE__, __func__, #x, x)
 #define PRINTI(x) if (DEBUGBOOL) fprintf(stderr, "%s:%d (%s)\t| %s=%d;\n", __FILE__, __LINE__, __func__, #x, x)
 #define PRINTF(format, ...) if (DEBUGBOOL) {fprintf(stderr, "%s:%d (%s)\t| ", __FILE__, __LINE__, __func__); fprintf(stderr, format, ## __VA_ARGS__);}
 #define PRINT(x) if (DEBUGBOOL) {fprintf(stderr, "%s:%d (%s)\t| ", __FILE__, __LINE__, __func__); fprintf(stderr, x); fprintf(stderr, "\n");}
@@ -74,12 +75,15 @@ namespace progressBar {
     }
 }
 
-#define PB_START(description_fmt, ...) char PB_DESCRIPTION[256]; sprintf(PB_DESCRIPTION, description_fmt, ## __VA_ARGS__); std::chrono::time_point<std::chrono::system_clock> PB_START_TIME = std::chrono::system_clock::now(), PB_CUR_TIME; std::chrono::duration<double> PB_DIFF; double PB_DURATION
+#define PB_DECL() char PB_DESCRIPTION[256]; std::chrono::time_point<std::chrono::system_clock> PB_START_TIME, PB_CUR_TIME; std::chrono::duration<double> PB_DIFF; double PB_DURATION = 0
+#define PB_STARTD(description_fmt, ...) sprintf(PB_DESCRIPTION, description_fmt, ## __VA_ARGS__); PB_START_TIME = std::chrono::system_clock::now()
+
+#define PB_START(description_fmt, ...) char PB_DESCRIPTION[256]; sprintf(PB_DESCRIPTION, description_fmt, ## __VA_ARGS__); std::chrono::time_point<std::chrono::system_clock> PB_START_TIME = std::chrono::system_clock::now(), PB_CUR_TIME; std::chrono::duration<double> PB_DIFF; double PB_DURATION = 0
 #define PB_PROGRESS(progress) PB_CUR_TIME = std::chrono::system_clock::now(); PB_DIFF = PB_CUR_TIME - PB_START_TIME; PB_DURATION = PB_DIFF.count(); \
                               printf("\33[2K\r%s: %.2f%% ", PB_DESCRIPTION, (float) progress * 100); \
                               progressBar::printProgress(progress); \
                               printf(" Elapsed: "); progressBar::printDuration(PB_DURATION); printf(", ETA: "); progressBar::printDuration( ((PB_DURATION / (float) (progress))) - PB_DURATION )
-#define PB_END() printf("\33[2K\r%s: %.2f%% ", PB_DESCRIPTION, 100.0); progressBar::printProgress(1); printf(" Took: "); progressBar::printDuration(PB_DURATION)
+#define PB_END() printf("\33[2K\r%s: %.2f%% ", PB_DESCRIPTION, 100.0); progressBar::printProgress(1); printf(" Took: "); progressBar::printDuration(PB_DURATION); printf("\n")
 
 // Read and write VEC3F from file
 namespace MyEigen {

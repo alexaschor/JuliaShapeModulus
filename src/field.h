@@ -138,9 +138,9 @@ public:
             exit(0);
         }
 
+        PB_DECL();
         if (verbose) {
-            printf("Writing %d x %d x %d field to %s... ", xRes, yRes, zRes, filename.c_str());
-            fflush(stdout);
+            PB_STARTD("Writing %dx%dx%d field to %s", xRes, yRes, zRes, filename.c_str());
         }
 
         // write dimensions
@@ -174,12 +174,13 @@ public:
             }
 
             if (verbose && i % 10 == 0) {
-                printf("\rWriting %d x %d x %d field to %s... %.2f%%", xRes, yRes, zRes, filename.c_str(), (Real) (100*i) / xRes);
-                fflush(stdout);
+                PB_PROGRESS((Real) i / xRes);
             }
         }
 
-        if (verbose) printf("\n");
+        if (verbose) {
+            PB_END();
+        }
     }
 };
 
@@ -278,10 +279,29 @@ public:
         return values[(z * yRes + y) * xRes + x];
     }
 
+    Real& atFieldPos(VEC3F pos) {
+        if (!hasMapBox) {
+            printf("Attempting atFieldPos on an ArrayGrid without a mapBox!\n");
+            exit(1);
+        }
+
+        VEC3F samplePoint = (pos - mapBox.min()).cwiseQuotient(mapBox.span());
+        samplePoint = samplePoint.cwiseMax(VEC3F(0,0,0)).cwiseMin(VEC3F(1,1,1));
+
+        const VEC3F indices = samplePoint.cwiseProduct(VEC3F(xRes-1, yRes-1, zRes-1));
+
+        return at(indices[0], indices[1], indices[2]);
+    }
+
+    Real& operator()(VEC3F pos) {
+        return atFieldPos(pos);
+    }
+
     // Access value directly in C-style array (allows setting)
     Real& operator[](size_t x) {
         return values[x];
     }
+
 
     // Create field from scalar function by sampling it on a regular grid
     ArrayGrid3D(uint xRes, uint yRes, uint zRes, VEC3F functionMin, VEC3F functionMax, FieldFunction3D *fieldFunction):ArrayGrid3D(xRes, yRes, zRes){
@@ -497,17 +517,27 @@ public:
     virtual Real getf(Real x, Real y, Real z) const override {
         // "Trilinear" interpolation with whatever technique we select
 
-        const uint x0 = floor(x);
-        const uint y0 = floor(y);
-        const uint z0 = floor(z);
+        uint x0 = floor(x);
+        uint y0 = floor(y);
+        uint z0 = floor(z);
 
-        const uint x1 = ceil(x);
-        const uint y1 = ceil(y);
-        const uint z1 = ceil(z);
+        uint x1 = x0 + 1;
+        uint y1 = y0 + 1;
+        uint z1 = z0 + 1;
 
-        const Real xd = (x - x0) / ((Real) x1 / x0);
-        const Real yd = (y - y0) / ((Real) y1 / y0);
-        const Real zd = (z - z0) / ((Real) z1 / z0);
+        // Clamp if out of bounds
+        x0 = (x0 > xRes - 1) ? xRes - 1 : x0;
+        y0 = (y0 > yRes - 1) ? yRes - 1 : y0;
+        z0 = (z0 > zRes - 1) ? zRes - 1 : z0;
+
+        x1 = (x1 > xRes - 1) ? xRes - 1 : x1;
+        y1 = (y1 > yRes - 1) ? yRes - 1 : y1;
+        z1 = (z1 > zRes - 1) ? zRes - 1 : z1;
+
+
+        const Real xd = min(1.0, max(0.0, (x - x0) / ((Real) x1 - x0)));
+        const Real yd = min(1.0, max(0.0, (y - y0) / ((Real) y1 - y0)));
+        const Real zd = min(1.0, max(0.0, (z - z0) / ((Real) z1 - z0)));
 
         // First grab 3D surroundings...
         const Real c000 = baseGrid->get(x0, y0, z0);
@@ -530,7 +560,9 @@ public:
         const Real c1 = interpolate(c01, c11, yd);
 
         // And grab 0D point.
-        return interpolate(c0, c1, zd);
+        const Real output = interpolate(c0, c1, zd);
+
+        return output;
     }
 
 
