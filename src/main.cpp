@@ -3,6 +3,7 @@
 #include <chrono>
 #include <cstdio>
 #include <cmath>
+#include <random>
 
 #include "SETTINGS.h"
 
@@ -12,142 +13,182 @@
 #include "Quaternion/QUATERNION.h"
 #include "Quaternion/POLYNOMIAL_4D.h"
 
+#include "julia.h"
+
 #include <chrono>
 #include <thread>
 
 using namespace std;
 
-ArrayGrid3D* debugField;
+POLYNOMIAL_4D randPolynomialInBox(Real radius, Real minPower, Real maxPower, uint nRoots, bool allowNonIntegerPowers = true) {
+    random_device rd;
+    default_random_engine eng(rd());
+    uniform_real_distribution<> spaceD(-radius, radius);
+    uniform_real_distribution<> powerD(minPower, maxPower);
 
-class ConstrainedRationalMap: public FieldFunction3D {
-//private:
-public:
-    Grid3D* distanceField;
-    POLYNOMIAL_4D topPolynomial;
-    bool hasBottomPolynomial;
-    POLYNOMIAL_4D bottomPolynomial;
-    Real c;
-    int maxIterations;
-    Real escape;
-
-public:
-    ConstrainedRationalMap(Grid3D* distanceField, POLYNOMIAL_4D topPolynomial, Real c = 300, int maxIterations = 3, Real escape = 20):
-        distanceField(distanceField), topPolynomial(topPolynomial), hasBottomPolynomial(false), c(c), maxIterations(maxIterations), escape(escape) {}
-
-    Real getFieldValue(const VEC3F& pos) const override {
-        QUATERNION iterate(pos[0], pos[1], pos[2], 0);
-        Real magnitude = iterate.magnitude();
-        int totalIterations = 0;
-
-        while (magnitude < escape && totalIterations < maxIterations) {
-            // First lookup the radius we're going to project to and save the original
-            const Real distance = (*distanceField)(VEC3F(iterate[0], iterate[1], iterate[2]));
-            Real radius = exp(c * distance);
-
-            QUATERNION original = iterate;
-
-            // Arbitrary: we define NAN as escaping
-            if (isnan(radius)) {
-                magnitude = escape;
-                break;
-            }
-
-            // If we know it'll escape we can skip quaternion multiplication evaluation
-            if (radius > escape) {
-                magnitude = radius;
-                totalIterations++;
-                break;
-            }
-
-            // iterate = topPolynomial.evaluate(iterate);
-            iterate = topPolynomial.evaluateScaledPowerFactored(iterate);
-            if (hasBottomPolynomial) {
-                QUATERNION bottomEval = bottomPolynomial.evaluateScaledPowerFactored(iterate);
-                iterate = (iterate / bottomEval);
-            }
-
-            // If quaternion multiplication fails, revert back to original
-            if (iterate.anyNans()) {
-                iterate = original;
-            }
-
-            // Try to normalize iterate, might produce infs or nans if magnitude is too small
-            QUATERNION normedIterate = iterate;
-            normedIterate.normalize();
-
-            bool tooSmall = normedIterate.anyNans();
-            if (tooSmall) {
-                original.normalize();
-                if (original.anyNans()) {
-                    // Need to put it at radius but have no direction info
-                    iterate = QUATERNION(1,0,0,0) * radius;
-                } else {
-                    iterate = original * radius;
-                }
-            } else {
-                iterate = normedIterate;
-                iterate *= radius;
-            }
-
-            magnitude = iterate.magnitude();
-
-            totalIterations++;
-        }
-
-        return log(magnitude);
+    vector<QUATERNION> roots{};
+    vector<Real> powers{};
+    for (uint i = 0; i < nRoots; ++i) {
+        roots.push_back(QUATERNION(spaceD(eng), spaceD(eng), spaceD(eng), spaceD(eng)));
+        powers.push_back( allowNonIntegerPowers? powerD(eng) : int(powerD(eng)) );
     }
 
-};
-
-Real sphereFunction(VEC3F pos) {
-    return (pos.norm() - 1);
+    POLYNOMIAL_4D poly(roots, powers);
+    return poly;
 }
+
+POLYNOMIAL_4D randPolynomialInObject(Grid3D* sdf, Real minPower, Real maxPower, uint nRoots, bool allowNonIntegerPowers = true) {
+    random_device rd;
+    default_random_engine eng(rd());
+
+    Real minX = 0, maxX = 1, minY = 0, maxY = 1, minZ = 0, maxZ = 1;
+    if (sdf->hasMapBox) {
+        minX = sdf->mapBox.min()[0];
+        minY = sdf->mapBox.min()[1];
+        minZ = sdf->mapBox.min()[2];
+
+        maxX = sdf->mapBox.max()[0];
+        maxY = sdf->mapBox.max()[1];
+        maxZ = sdf->mapBox.max()[2];
+    }
+
+    uniform_real_distribution<> spaceXD(minX, maxX);
+    uniform_real_distribution<> spaceYD(minY, maxY);
+    uniform_real_distribution<> spaceZD(minZ, maxZ);
+
+    uniform_real_distribution<> powerD(minPower, maxPower);
+
+    vector<QUATERNION> roots{};
+    vector<Real> powers{};
+    for (uint i = 0; i < nRoots; ++i) {
+        QUATERNION rootPos;
+        bool insideTarget = false;
+        while (not insideTarget) {
+            rootPos = QUATERNION(spaceXD(eng), spaceYD(eng), spaceZD(eng), 0);
+            insideTarget = (*sdf).getFieldValue(VEC3F(rootPos[0], rootPos[1], rootPos[2])) < 0;
+        }
+        roots.push_back(rootPos);
+        powers.push_back( allowNonIntegerPowers? powerD(eng) : int(powerD(eng)) );
+    }
+
+    POLYNOMIAL_4D poly(roots, powers);
+    return poly;
+}
+
+void dumpRotInfo(QuatToQuatFn* p, AABB range, int res) {
+
+    QuatQuatRotField r(p, 0);
+    QuatQuatRotField g(p, 1);
+    QuatQuatRotField b(p, 2);
+    QuatQuatMagField mag(p);
+
+    VirtualGrid3D gr(res, res, res, range.min(), range.max(), &r);
+    gr.writeF3D("temp/r.f3d", true);
+
+    VirtualGrid3D gg(res, res, res, range.min(), range.max(), &g);
+    gg.writeF3D("temp/g.f3d", true);
+
+    VirtualGrid3D gb(res, res, res, range.min(), range.max(), &b);
+    gb.writeF3D("temp/b.f3d", true);
+
+    VirtualGrid3D gm(res, res, res, range.min(), range.max(), &mag);
+    gm.writeF3D("temp/mag.f3d", true);
+}
+
+// ========================= SPHERE INTERSECTION SAMPLING ============================
+
+// Return percent of sample points inside SDF on surface of sphere
+Real sampleSpherePoints(Grid3D* sdf, Real radius, uint numSamples) {
+    uint numInside = 0;
+
+    random_device rd;
+    default_random_engine eng(rd());
+    uniform_real_distribution<> dist(-1, 1);
+
+    for (uint i = 0; i < numSamples; ++i) {
+        VEC3F sp(dist(eng), dist(eng), dist(eng));
+        sp.normalize();
+        sp *= radius;
+
+        if (sdf->getFieldValue(sp) < 0) numInside++;
+
+    }
+    return ((Real) numInside) / numSamples;
+}
+
+void sampleSphereIntersection(Grid3D* sdf, Real minRadius, Real maxRadius, uint numSpheres, uint numSamples, string outputFile) {
+    ofstream out;
+    out.open(outputFile);
+
+    PB_START("Sampling sphere intersection curve");
+
+    for (uint i = 0; i < numSpheres; ++i) {
+        Real sampleRadius = minRadius + ((maxRadius - minRadius) * ((Real) i / numSpheres));
+        out << sampleRadius << ", " << sampleSpherePoints(sdf, sampleRadius, numSamples) << endl;
+        PB_PROGRESS((float) i / numSpheres);
+    }
+
+    PB_END();
+
+    out.close();
+}
+
+// ===================================================================================
 
 int main(int argc, char *argv[]) {
 
     if(argc != 6) {
         cout << "USAGE: " << endl;
         cout << "To create a shaped Julia set from a distance field:" << endl;
-        cout << " " << argv[0] << " <distance field> <4D top polynomial> <4D bottom polynomial, or NONE> <output resolution> <output OBJ>" << endl;
+        cout << " " << argv[0] << " <distance field> <4D top polynomial, or RANDOM> <output resolution> <fill level> <output OBJ>" << endl;
         exit(0);
     }
 
+    // Read distfield
     ArrayGrid3D distFieldCoarse(argv[1]);
+    PRINTF("Got distance field with res %dx%dx%d\n", distFieldCoarse.xRes, distFieldCoarse.yRes, distFieldCoarse.zRes);
 
+    // Create interpolation grid (smooth it out)
     InterpolationGrid distField(&distFieldCoarse, InterpolationGrid::LINEAR);
     distField.mapBox.setCenter(VEC3F(0,0,0));
-    PRINTF("Got distance field with res %dx%dx%d\n", distField.xRes, distField.yRes, distField.zRes);
-
-    PRINT("NOTE: Setting simulation bounds to hard-coded values");
-    distField.mapBox.max() = VEC3F(1.25, 1.25, 1.25);
-    distField.mapBox.min() = VEC3F(-1.25, -1.25, -1.25);
 
 
-    if (string(argv[3]) != "NONE") {
-        POLYNOMIAL_4D polyTop(argv[2]);
-        ConstrainedRationalMap map(&distField, polyTop, 100);
+    // Save radius-membership relationship
+    // sampleSphereIntersection(&distField, 0, 0.6, 2500, 100000, "inside.csv");
+    // exit(0);
 
-        POLYNOMIAL_4D polyBottom(argv[3]);
-        map.hasBottomPolynomial = true;
-        map.bottomPolynomial = polyBottom;
+    PRINT("NOTE: Setting simulation bounds to hard-coded values (not from distance field)");
+    distField.mapBox.max() = VEC3F(0.5, 0.5, 0.5);
+    distField.mapBox.min() = VEC3F(-0.5, -0.5, -0.5);
 
-        int res = atoi(argv[4]);
-        VirtualGrid3DLimitedCache vg(res, res, res, distField.mapBox.min(), distField.mapBox.max(), &map);
+    QuatToQuatFn *p;
 
-        Mesh m;
-        MC::march_cubes(&vg, m, true);
-        m.writeOBJ(argv[5]);
+    if (string(argv[2]) == "RANDOM") {
+        // Create random polynomial
+        // POLYNOMIAL_4D polyTop = randPolynomialInBox(0.7, 8, 13, 25, false);
+        POLYNOMIAL_4D polyTop = randPolynomialInObject(&distField, 2, 13, 10, false);
+        p = new RationalQuatPoly(polyTop);
     } else {
         POLYNOMIAL_4D polyTop(argv[2]);
-        ConstrainedRationalMap map(&distField, polyTop, 100);
-
-        int res = atoi(argv[4]);
-        VirtualGrid3DLimitedCache vg(res, res, res, distField.mapBox.min(), distField.mapBox.max(), &map);
-
-        Mesh m;
-        MC::march_cubes(&vg, m, true);
-        m.writeOBJ(argv[5]);
+        p = new RationalQuatPoly(polyTop);
     }
+
+    // Save polynomial info for inspection later
+    // FILE* out = fopen("temp/p.poly4d", "w");
+    //     polyTop.write(out);
+    // fclose(out);
+    // dumpRotInfo(&p, distField.mapBox, 100);
+
+    // Finally we actually compute the Julia set
+    Real fillLevel = atof(argv[4]); // This is C in the equation
+    DistanceGuidedQuatMap map(&distField, p, fillLevel, 3);
+
+    int res = atoi(argv[3]);
+    VirtualGrid3DLimitedCache vg(res, res, res, distField.mapBox.min(), distField.mapBox.max(), &map);
+    Mesh m;
+    MC::march_cubes(&vg, m, true);
+    m.writeOBJ(argv[5]);
 
     return 0;
 }
+
