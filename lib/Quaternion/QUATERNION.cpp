@@ -127,7 +127,7 @@ QUATERNION operator/(const QUATERNION& left, const Real& right)
 
 void QUATERNION::normalize()
 {
-  Real invMagnitude = 1.0 / sqrtf(_x * _x + _y * _y + _z * _z + _w * _w);
+  Real invMagnitude = 1.0 / sqrt(_x * _x + _y * _y + _z * _z + _w * _w);
   _x *= invMagnitude;
   _y *= invMagnitude;
   _z *= invMagnitude;
