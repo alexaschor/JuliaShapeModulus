@@ -75,8 +75,86 @@ POLYNOMIAL_4D randPolynomialInObject(Grid3D* sdf, Real minPower, Real maxPower, 
     return poly;
 }
 
+POLYNOMIAL_4D randPolynomialNearSurface(Grid3D* sdf, Real minPower, Real maxPower, uint nRoots, Real maxDist, bool allowNonIntegerPowers = true) {
+    random_device rd;
+    default_random_engine eng(rd());
+
+    Real minX = 0, maxX = 1, minY = 0, maxY = 1, minZ = 0, maxZ = 1;
+    if (sdf->hasMapBox) {
+        minX = sdf->mapBox.min()[0];
+        minY = sdf->mapBox.min()[1];
+        minZ = sdf->mapBox.min()[2];
+
+        maxX = sdf->mapBox.max()[0];
+        maxY = sdf->mapBox.max()[1];
+        maxZ = sdf->mapBox.max()[2];
+    }
+
+    uniform_real_distribution<> spaceXD(minX, maxX);
+    uniform_real_distribution<> spaceYD(minY, maxY);
+    uniform_real_distribution<> spaceZD(minZ, maxZ);
+
+    uniform_real_distribution<> powerD(minPower, maxPower);
+
+    vector<QUATERNION> roots{};
+    vector<Real> powers{};
+    for (uint i = 0; i < nRoots; ++i) {
+        QUATERNION rootPos;
+        bool insideTarget = false;
+        while (not insideTarget) {
+            rootPos = QUATERNION(spaceXD(eng), spaceYD(eng), spaceZD(eng), 0);
+            insideTarget = abs((*sdf).getFieldValue(VEC3F(rootPos[0], rootPos[1], rootPos[2]))) < maxDist;
+        }
+        roots.push_back(rootPos);
+        powers.push_back( allowNonIntegerPowers? powerD(eng) : int(powerD(eng)) );
+    }
+
+    POLYNOMIAL_4D poly(roots, powers);
+    return poly;
+}
+
+POLYNOMIAL_4D randPolynomialNearSurfaceBlueNoise(Grid3D* sdf, Real minPower, Real maxPower, uint nRoots, Real maxDist, bool allowNonIntegerPowers = true) {
+    random_device rd;
+    default_random_engine eng(rd());
+
+    Real minX = 0, maxX = 1, minY = 0, maxY = 1, minZ = 0, maxZ = 1;
+    if (sdf->hasMapBox) {
+        minX = sdf->mapBox.min()[0];
+        minY = sdf->mapBox.min()[1];
+        minZ = sdf->mapBox.min()[2];
+
+        maxX = sdf->mapBox.max()[0];
+        maxY = sdf->mapBox.max()[1];
+        maxZ = sdf->mapBox.max()[2];
+    }
+
+    uniform_real_distribution<> spaceXD(minX, maxX);
+    uniform_real_distribution<> spaceYD(minY, maxY);
+    uniform_real_distribution<> spaceZD(minZ, maxZ);
+
+    uniform_real_distribution<> powerD(minPower, maxPower);
+
+    vector<QUATERNION> roots{};
+    vector<Real> powers{};
+    for (uint i = 0; i < nRoots; ++i) {
+        QUATERNION rootPos;
+        bool insideTarget = false;
+        while (not insideTarget) {
+            rootPos = QUATERNION(spaceXD(eng), spaceYD(eng), spaceZD(eng), 0);
+            insideTarget = abs((*sdf).getFieldValue(VEC3F(rootPos[0], rootPos[1], rootPos[2]))) < maxDist;
+        }
+        roots.push_back(rootPos);
+        powers.push_back( allowNonIntegerPowers? powerD(eng) : int(powerD(eng)) );
+    }
+
+    POLYNOMIAL_4D poly(roots, powers);
+    return poly;
+}
+
 void dumpRotInfo(QuatToQuatFn* p, AABB range, int res) {
 
+    // This is hacky, I'm using three scalar fields where
+    // I really should just make a vector field.
     QuatQuatRotField r(p, 0);
     QuatQuatRotField g(p, 1);
     QuatQuatRotField b(p, 2);
@@ -165,8 +243,10 @@ int main(int argc, char *argv[]) {
 
     if (string(argv[2]) == "RANDOM") {
         // Create random polynomial
+
         // POLYNOMIAL_4D polyTop = randPolynomialInBox(0.7, 8, 13, 25, false);
-        POLYNOMIAL_4D polyTop = randPolynomialInObject(&distField, 2, 13, 10, false);
+        // POLYNOMIAL_4D polyTop = randPolynomialInObject(&distField, 2, 13, 10, false);
+        POLYNOMIAL_4D polyTop = randPolynomialNearSurface(&distField, 2, 13, 10, 0.001, false);
         p = new RationalQuatPoly(polyTop);
     } else {
         POLYNOMIAL_4D polyTop(argv[2]);
