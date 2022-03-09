@@ -5,6 +5,7 @@
 #include "Eigen/Sparse"
 #include "Eigen/Geometry"
 #include <fstream>
+#include <chrono>
 
 using namespace Eigen;
 
@@ -76,9 +77,9 @@ namespace progressBar {
 }
 
 #define PB_DECL() char PB_DESCRIPTION[256]; std::chrono::time_point<std::chrono::system_clock> PB_START_TIME, PB_CUR_TIME; std::chrono::duration<double> PB_DIFF; double PB_DURATION = 0
-#define PB_STARTD(description_fmt, ...) sprintf(PB_DESCRIPTION, description_fmt, ## __VA_ARGS__); PB_START_TIME = std::chrono::system_clock::now()
+#define PB_STARTD(description_fmt, ...) sprintf(PB_DESCRIPTION, description_fmt, ## __VA_ARGS__); PB_START_TIME = std::chrono::system_clock::now(); PB_PROGRESS(0)
 
-#define PB_START(description_fmt, ...) char PB_DESCRIPTION[256]; sprintf(PB_DESCRIPTION, description_fmt, ## __VA_ARGS__); std::chrono::time_point<std::chrono::system_clock> PB_START_TIME = std::chrono::system_clock::now(), PB_CUR_TIME; std::chrono::duration<double> PB_DIFF; double PB_DURATION = 0
+#define PB_START(description_fmt, ...) char PB_DESCRIPTION[256]; sprintf(PB_DESCRIPTION, description_fmt, ## __VA_ARGS__); std::chrono::time_point<std::chrono::system_clock> PB_START_TIME = std::chrono::system_clock::now(), PB_CUR_TIME; std::chrono::duration<double> PB_DIFF; double PB_DURATION = 0; PB_PROGRESS(0)
 #define PB_PROGRESS(progress) PB_CUR_TIME = std::chrono::system_clock::now(); PB_DIFF = PB_CUR_TIME - PB_START_TIME; PB_DURATION = PB_DIFF.count(); \
                               printf("\33[2K\r%s: %.2f%% ", PB_DESCRIPTION, (float) progress * 100); \
                               progressBar::printProgress(progress); \
