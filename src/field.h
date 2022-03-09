@@ -293,6 +293,11 @@ public:
         return at(indices[0], indices[1], indices[2]);
     }
 
+    Real& atFieldPos(Real x, Real y, Real z) {
+        return atFieldPos(VEC3F(x,y,z));
+    }
+
+
     Real& operator()(VEC3F pos) {
         return atFieldPos(pos);
     }
