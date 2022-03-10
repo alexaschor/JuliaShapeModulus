@@ -83,7 +83,7 @@ namespace progressBar {
 #define PB_PROGRESS(progress) PB_CUR_TIME = std::chrono::system_clock::now(); PB_DIFF = PB_CUR_TIME - PB_START_TIME; PB_DURATION = PB_DIFF.count(); \
                               printf("\33[2K\r%s: %.2f%% ", PB_DESCRIPTION, (float) progress * 100); \
                               progressBar::printProgress(progress); \
-                              printf(" Elapsed: "); progressBar::printDuration(PB_DURATION); printf(", ETA: "); progressBar::printDuration( ((PB_DURATION / (float) (progress))) - PB_DURATION )
+                              printf(" Elapsed: "); progressBar::printDuration(PB_DURATION); printf(", ETA: "); progressBar::printDuration( ((PB_DURATION / (float) (progress))) - PB_DURATION ); fflush(stdout)
 #define PB_END() printf("\33[2K\r%s: %.2f%% ", PB_DESCRIPTION, 100.0); progressBar::printProgress(1); printf(" Took: "); progressBar::printDuration(PB_DURATION); printf("\n")
 
 // Read and write VEC3F from file

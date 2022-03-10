@@ -68,7 +68,6 @@ static void sweep(const std::vector<Vec3ui> &tri, const std::vector<Vec3f> &x,
     int k0, k1;
     if(dk>0){ k0=1; k1=phi.nk; }
     else{ k0=phi.nk-2; k1=-1; }
-    PB_START("Sweep call (there will be sixteen of these total)");
     for(int k=k0; k!=k1; k+=dk) {
         for(int j=j0; j!=j1; j+=dj) for(int i=i0; i!=i1; i+=di){
             Vec3f gx(i*dx+origin[0], j*dx+origin[1], k*dx+origin[2]);
@@ -80,9 +79,7 @@ static void sweep(const std::vector<Vec3ui> &tri, const std::vector<Vec3f> &x,
             check_neighbour(tri, x, phi, closest_tri, gx, i, j, k, i,    j-dj, k-dk);
             check_neighbour(tri, x, phi, closest_tri, gx, i, j, k, i-di, j-dj, k-dk);
         }
-        PB_PROGRESS(((float) k1 - k) / dk);
     }
-    PB_END();
 }
 
 // calculate twice signed area of triangle (0,0)-(x1,y1)-(x2,y2)
@@ -171,18 +168,25 @@ void make_level_set3(const std::vector<Vec3ui> &tri, const std::vector<Vec3f> &x
     PB_END();
 
 
-    PB_STARTD("Filling in distances not near mesh");
+    PB_STARTD("Filling in distances not near mesh using fast sweeping");
     // and now we fill in the rest of the distances with fast sweeping
     for(unsigned int pass=0; pass<2; ++pass){
         sweep(tri, x, phi, closest_tri, origin, dx, +1, +1, +1);
+        PB_PROGRESS(0.5 * pass + (1.0/16));
         sweep(tri, x, phi, closest_tri, origin, dx, -1, -1, -1);
+        PB_PROGRESS(0.5 * pass + (2.0/16));
         sweep(tri, x, phi, closest_tri, origin, dx, +1, +1, -1);
+        PB_PROGRESS(0.5 * pass + (3.0/16));
         sweep(tri, x, phi, closest_tri, origin, dx, -1, -1, +1);
+        PB_PROGRESS(0.5 * pass + (4.0/16));
         sweep(tri, x, phi, closest_tri, origin, dx, +1, -1, +1);
+        PB_PROGRESS(0.5 * pass + (5.0/16));
         sweep(tri, x, phi, closest_tri, origin, dx, -1, +1, -1);
+        PB_PROGRESS(0.5 * pass + (6.0/16));
         sweep(tri, x, phi, closest_tri, origin, dx, +1, -1, -1);
+        PB_PROGRESS(0.5 * pass + (7.0/16));
         sweep(tri, x, phi, closest_tri, origin, dx, -1, +1, +1);
-        PB_PROGRESS((float) pass / 2);
+        PB_PROGRESS(0.5 * pass + (8.0/16));
     }
     PB_END();
 
