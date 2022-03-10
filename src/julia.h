@@ -157,7 +157,7 @@ public:
                     bool nanOut = false;
                     Real actualMag = p->getFieldValue(samplePoint).magnitude();
 
-                    if (isnan(actualMag)) {
+                    if (::isnan(actualMag)) {
                         nanOut = true;
                         actualMag = samplePoint.magnitude();
                     }
@@ -165,7 +165,7 @@ public:
                     // const Real adjustedMag = ((1 - fitScale) * actualMag) + (fitScale * targetMag);
                     const Real adjustedMag = exp((1 - fitScale) * log(actualMag)) + (fitScale * log(targetMag));
 
-                    if (!isnan(distance)) out << targetMag << ", " << adjustedMag << ", " << (nanOut? 1 : 0) << endl;
+                    if (!::isnan(distance)) out << targetMag << ", " << adjustedMag << ", " << (nanOut? 1 : 0) << endl;
                 }
             }
             PB_PROGRESS((x - min[0]) / (max[0] - min[0]));

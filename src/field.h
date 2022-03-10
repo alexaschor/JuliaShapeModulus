@@ -14,6 +14,7 @@ class AABB: public AlignedBox<Real, 3> {
 public:
     using AlignedBox<Real, 3>::AlignedBox;
     AABB(VEC3F c1, VEC3F c2): AlignedBox<Real, 3>(c1.cwiseMin(c2), c1.cwiseMax(c2)) {}
+    AABB(): AABB(VEC3F(0,0,0), VEC3F(0,0,0)){}
 
     VEC3F span() const {
         return max()-min();
