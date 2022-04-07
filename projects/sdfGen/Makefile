@@ -1,5 +1,4 @@
-CXX=g++-9
-CXXFLAGS=-Wall -MMD -std=c++11 -fopenmp -I../../lib -I../../src/ -I../../
+include ../include.mk
 
 EXECUTABLE = ../../bin/sdfGen
 

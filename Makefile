@@ -1,6 +1,8 @@
 SHELL := /bin/bash -e
 LIBS = Quaternion
 
+include ./projects/include.mk
+
 all: sdfGen main
 
 sdfGen:

@@ -152,7 +152,6 @@ POLYNOMIAL_4D randPolynomialNearSurfaceBlueNoise(Grid3D* sdf, Real minPower, Rea
 }
 
 void dumpRotInfo(QuatToQuatFn* p, AABB range, int res) {
-
     // This is hacky, I'm using three scalar fields where
     // I really should just make a vector field.
     QuatQuatRotField r(p, 0);
@@ -173,52 +172,12 @@ void dumpRotInfo(QuatToQuatFn* p, AABB range, int res) {
     gm.writeF3D("temp/mag.f3d", true);
 }
 
-// ========================= SPHERE INTERSECTION SAMPLING ============================
-
-// Return percent of sample points inside SDF on surface of sphere
-Real sampleSpherePoints(Grid3D* sdf, Real radius, uint numSamples) {
-    uint numInside = 0;
-
-    random_device rd;
-    default_random_engine eng(rd());
-    uniform_real_distribution<> dist(-1, 1);
-
-    for (uint i = 0; i < numSamples; ++i) {
-        VEC3F sp(dist(eng), dist(eng), dist(eng));
-        sp.normalize();
-        sp *= radius;
-
-        if (sdf->getFieldValue(sp) < 0) numInside++;
-
-    }
-    return ((Real) numInside) / numSamples;
-}
-
-void sampleSphereIntersection(Grid3D* sdf, Real minRadius, Real maxRadius, uint numSpheres, uint numSamples, string outputFile) {
-    ofstream out;
-    out.open(outputFile);
-
-    PB_START("Sampling sphere intersection curve");
-
-    for (uint i = 0; i < numSpheres; ++i) {
-        Real sampleRadius = minRadius + ((maxRadius - minRadius) * ((Real) i / numSpheres));
-        out << sampleRadius << ", " << sampleSpherePoints(sdf, sampleRadius, numSamples) << endl;
-        PB_PROGRESS((float) i / numSpheres);
-    }
-
-    PB_END();
-
-    out.close();
-}
-
-// ===================================================================================
-
 int main(int argc, char *argv[]) {
 
-    if(argc != 6) {
+    if(argc != 7) {
         cout << "USAGE: " << endl;
         cout << "To create a shaped Julia set from a distance field:" << endl;
-        cout << " " << argv[0] << " <distance field> <4D top polynomial, or RANDOM> <output resolution> <fill level> <output OBJ>" << endl;
+        cout << " " << argv[0] << " <distance field> <4D top polynomial, or RANDOM> <output resolution> <fill level> <fill offset> <output OBJ>" << endl;
         exit(0);
     }
 
@@ -246,7 +205,9 @@ int main(int argc, char *argv[]) {
 
         // POLYNOMIAL_4D polyTop = randPolynomialInBox(0.7, 8, 13, 25, false);
         // POLYNOMIAL_4D polyTop = randPolynomialInObject(&distField, 2, 13, 10, false);
+        PRINT("Generating random polynomial...");
         POLYNOMIAL_4D polyTop = randPolynomialNearSurface(&distField, 2, 13, 10, 0.001, false);
+
         p = new RationalQuatPoly(polyTop);
     } else {
         POLYNOMIAL_4D polyTop(argv[2]);
@@ -255,19 +216,20 @@ int main(int argc, char *argv[]) {
 
     // Save polynomial info for inspection later
     // FILE* out = fopen("temp/p.poly4d", "w");
-    //     polyTop.write(out);
+    // ((RationalQuatPoly* )p)->topPolynomial.write(out);
     // fclose(out);
     // dumpRotInfo(&p, distField.mapBox, 100);
 
     // Finally we actually compute the Julia set
     Real fillLevel = atof(argv[4]); // This is C in the equation
-    DistanceGuidedQuatMap map(&distField, p, fillLevel, 3);
+    Real fillOffset = atof(argv[5]); // This is B in the equation
+    DistanceGuidedQuatMap map(&distField, p, fillLevel, fillOffset, 3);
 
     int res = atoi(argv[3]);
     VirtualGrid3DLimitedCache vg(res, res, res, distField.mapBox.min(), distField.mapBox.max(), &map);
     Mesh m;
     MC::march_cubes(&vg, m, true);
-    m.writeOBJ(argv[5]);
+    m.writeOBJ(argv[6]);
 
     return 0;
 }

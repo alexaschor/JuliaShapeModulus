@@ -14,6 +14,7 @@ typedef unsigned int uint;
 typedef Matrix<Real, 2, 1 > VEC2F;
 typedef Matrix<Real, 3, 1 > VEC3F;
 typedef Matrix<int, 3, 1 > VEC3I;
+typedef Matrix<int, 1, 1 > VEC2I;
 typedef VectorXd VECTOR;
 
 #define MC_MAX_ROOTFINDING_ITERATIONS 100
@@ -23,6 +24,7 @@ typedef VectorXd VECTOR;
 #define DEBUGBOOL true
 
 // Printing various data types along with the variable name, filename and line numbet
+#define PRINTV2(v) if (DEBUGBOOL) fprintf(stderr, "%s:%d (%s)\t| %s={%.2e, %.2e};\n", __FILE__, __LINE__, __func__, #v, (v)[0], (v)[1])
 #define PRINTV3(v) if (DEBUGBOOL) fprintf(stderr, "%s:%d (%s)\t| %s={%.2e, %.2e, %.2e};\n", __FILE__, __LINE__, __func__, #v, (v)[0], (v)[1], (v)[2])
 #define PRINTV4(v) if (DEBUGBOOL) fprintf(stderr, "%s:%d (%s)\t| %s={%.2e, %.2e, %.2e, %.2e};\n", __FILE__, __LINE__, __func__, #v, (v)[0], (v)[1], (v)[2], (v)[3])
 #define PRINTD(x) if (DEBUGBOOL) fprintf(stderr, "%s:%d (%s)\t| %s=%f;\n", __FILE__, __LINE__, __func__, #x, x)
@@ -119,6 +121,33 @@ namespace MyEigen {
         vec[0] = elementD[0];
         vec[1] = elementD[1];
         vec[2] = elementD[2];
+    }
+
+    inline void write_vec2f(FILE* file, const VEC2F& vec) {
+        if (sizeof(Real) == sizeof(double))
+        {
+            fwrite((void*)&vec[0], sizeof(double), 1, file);
+            fwrite((void*)&vec[1], sizeof(double), 1, file);
+        }
+        else
+        {
+            double elementD[2];
+            elementD[0] = vec[0];
+            elementD[1] = vec[1];
+            fwrite((void*)&elementD[0], sizeof(double), 1, file);
+            fwrite((void*)&elementD[1], sizeof(double), 1, file);
+        }
+    }
+
+    inline void read_vec2f(FILE* file, VEC2F& vec) {
+        // make sure it reads into a double
+        double elementD[2];
+        fread((void*)&elementD[0], sizeof(double), 1, file);
+        fread((void*)&elementD[1], sizeof(double), 1, file);
+
+        // let the assign resolve the type issues
+        vec[0] = elementD[0];
+        vec[1] = elementD[1];
     }
 
 }

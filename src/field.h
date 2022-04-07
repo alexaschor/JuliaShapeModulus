@@ -101,6 +101,18 @@ public:
         }
     }
 
+    virtual VEC3F getCellCenter(const VEC3I& pos) const {
+        if (!hasMapBox) {
+            printf("Attempting getCellCenter on a Grid3D without a mapBox!\n");
+            exit(1);
+        }
+
+        VEC3F cellCornerToCenter = mapBox.span().cwiseQuotient(VEC3F(xRes, yRes, zRes))/2.0;
+
+        VEC3F posV3F(pos[0], pos[1], pos[2]);
+        return mapBox.min() + posV3F.cwiseQuotient(VEC3F(xRes, yRes, zRes)).cwiseProduct(mapBox.span()) + cellCornerToCenter;
+    }
+
     virtual void writeCSV(string filename) {
         ofstream out;
         out.open(filename);

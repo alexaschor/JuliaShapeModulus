@@ -51,6 +51,8 @@ public:
     QuatToQuatFn* p;
 
     Real c;
+    Real b;
+
     int maxIterations;
     Real escape;
     Real fitScale;
@@ -58,8 +60,8 @@ public:
     ArrayGrid3D* debugGrid;
 
 public:
-    DistanceGuidedQuatMap(Grid3D* distanceField,  QuatToQuatFn* p, Real c = 300, int maxIterations = 3, Real escape = 20, Real fitScale = 1):
-        distanceField(distanceField), p(p), c(c), maxIterations(maxIterations), escape(escape), fitScale(fitScale) {}
+    DistanceGuidedQuatMap(Grid3D* distanceField,  QuatToQuatFn* p, Real c = 300, Real b = 0, int maxIterations = 3, Real escape = 20, Real fitScale = 1):
+        distanceField(distanceField), p(p), c(c), b(b), maxIterations(maxIterations), escape(escape), fitScale(fitScale) {}
 
     Real getFieldValue(const VEC3F& pos) const override {
         QUATERNION iterate(pos[0], pos[1], pos[2], 0);
@@ -69,7 +71,7 @@ public:
         while (magnitude < escape && totalIterations < maxIterations) {
             // First lookup the radius we're going to project to and save the original
             const Real distance = (*distanceField)(VEC3F(iterate[0], iterate[1], iterate[2]));
-            Real radius = exp(c * distance);
+            Real radius = exp(c * (distance - b));
 
             QUATERNION original = iterate;
             VEC3F iterateV3(iterate[0], iterate[1], iterate[2]);
