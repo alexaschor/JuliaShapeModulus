@@ -6,6 +6,7 @@
 #include <string>
 
 #include "SETTINGS.h"
+#include "triangle.h"
 
 using namespace std;
 
@@ -14,6 +15,11 @@ public:
     std::vector<VEC3F> vertices;
     std::vector<VEC3F> normals;
     std::vector<uint> indices;
+
+    int numFaces() {
+        assert(indices.size() % 3 == 0);
+        return indices.size() / 3;
+    }
 
     //readOBJ function adapted from http://www.opengl-tutorial.org
     void readOBJ(std::string filename) {
@@ -69,6 +75,12 @@ public:
         out.close();
 
         std::cout << "Wrote " << vertices.size() << " vertices and " << indices.size() / 3 << " faces to " << filename << std::endl;
+    }
+
+    Triangle triangle(int idx) {
+        idx *= 3;
+        Triangle out(&(vertices[indices[idx]]), &(vertices[indices[idx] + 1]), &(vertices[indices[idx] + 2]));
+        return out;
     }
 
 };

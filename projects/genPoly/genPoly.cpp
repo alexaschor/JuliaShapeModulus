@@ -1,22 +1,13 @@
-#include <iostream>
-#include <fstream>
-#include <chrono>
-#include <cstdio>
-#include <cmath>
-#include <random>
-
 #include "SETTINGS.h"
-
-#include "MC.h"
-#include "mesh.h"
 #include "field.h"
-#include "Quaternion/QUATERNION.h"
+#include "mesh.h"
 #include "Quaternion/POLYNOMIAL_4D.h"
 
-#include "julia.h"
-
-#include <chrono>
-#include <thread>
+#include <cstdio>
+#include <fstream>
+#include <iostream>
+#include <sstream>
+#include <limits>
 
 using namespace std;
 
@@ -156,86 +147,64 @@ POLYNOMIAL_4D randPolynomialNearSurfaceBlueNoise(Grid3D* sdf, Real minPower, Rea
     return poly;
 }
 
-void dumpRotInfo(QuatToQuatFn* p, AABB range, int res) {
-    // This is hacky, I'm using three scalar fields where
-    // I really should just make a vector field.
-    QuatQuatRotField r(p, 0);
-    QuatQuatRotField g(p, 1);
-    QuatQuatRotField b(p, 2);
-    QuatQuatMagField mag(p);
+int main(int argc, char* argv[]) {
 
-    VirtualGrid3D gr(res, res, res, range.min(), range.max(), &r);
-    gr.writeF3D("temp/r.f3d", true);
-
-    VirtualGrid3D gg(res, res, res, range.min(), range.max(), &g);
-    gg.writeF3D("temp/g.f3d", true);
-
-    VirtualGrid3D gb(res, res, res, range.min(), range.max(), &b);
-    gb.writeF3D("temp/b.f3d", true);
-
-    VirtualGrid3D gm(res, res, res, range.min(), range.max(), &mag);
-    gm.writeF3D("temp/mag.f3d", true);
-}
-
-int main(int argc, char *argv[]) {
-
-    if(argc != 7) {
+    if(argc < 6) {
         cout << "USAGE: " << endl;
-        cout << "To create a shaped Julia set from a distance field:" << endl;
-        cout << " " << argv[0] << " <distance field> <4D top polynomial, or RANDOM> <output resolution> <fill level> <fill offset> <output OBJ>" << endl;
-        exit(0);
+        cout << "To generate a random polynomial in a bounding box:" << endl;
+        cout << " " << argv[0] << " <numRoots> <min power> <max power> <*.poly output> BOX <x min> <y min> <z min> <x max> <y max> <z max>" << endl;;
+
+        cout << "To generate a random polynomial in an OBJ's bounding box:" << endl;
+        cout << " " << argv[0] << " <numRoots> <min power> <max power> <*.poly output> OBJBOX <*.obj model>" << endl;;
+
+        cout << "To generate a random polynomial near an SDF's surface:" << endl;
+        cout << " " << argv[0] << " <numRoots> <min power> <max power> <*.poly output> SDF <*.f3d sdf> <max distance>" << endl;;
+        exit(-1);
     }
 
-    // Read distfield
-    ArrayGrid3D distFieldCoarse(argv[1]);
-    PRINTF("Got distance field with res %dx%dx%d\n", distFieldCoarse.xRes, distFieldCoarse.yRes, distFieldCoarse.zRes);
+    POLYNOMIAL_4D poly;
 
-    // Create interpolation grid (smooth it out)
-    InterpolationGrid distField(&distFieldCoarse, InterpolationGrid::LINEAR);
-    distField.mapBox.setCenter(VEC3F(0,0,0));
+    int numRoots = atoi(argv[1]);
+    int minPower = atoi(argv[2]);
+    int maxPower = atoi(argv[3]);
 
+    string outputFilename(argv[4]);
 
-    // Save radius-membership relationship
-    // sampleSphereIntersection(&distField, 0, 0.6, 2500, 100000, "inside.csv");
-    // exit(0);
+    string mode(argv[5]);
 
-    PRINT("NOTE: Setting simulation bounds to hard-coded values (not from distance field)");
-    distField.mapBox.max() = VEC3F(0.5, 0.5, 0.5);
-    distField.mapBox.min() = VEC3F(-0.5, -0.5, -0.5);
-
-    QuatToQuatFn *p;
-
-    if (string(argv[2]) == "RANDOM") {
-        // Create random polynomial
-
-        // POLYNOMIAL_4D polyTop = randPolynomialInBox(0.7, 8, 13, 25, false);
-        // POLYNOMIAL_4D polyTop = randPolynomialInObject(&distField, 2, 13, 10, false);
-        PRINT("Generating random polynomial...");
-        POLYNOMIAL_4D polyTop = randPolynomialNearSurface(&distField, 2, 13, 10, 0.001, false);
-
-        p = new RationalQuatPoly(polyTop);
-    } else {
-        POLYNOMIAL_4D polyTop(argv[2]);
-        p = new RationalQuatPoly(polyTop);
+    if (mode == "BOX") {
+        AABB box(VEC3F(atof(argv[6]), atof(argv[7]), atof(argv[8])), VEC3F(atof(argv[9]), atof(argv[10]), atof(argv[11])));
+        poly = randPolynomialInBox(box, minPower, maxPower, numRoots, false);
     }
 
-    // Save polynomial info for inspection later
-    // FILE* out = fopen("temp/p.poly4d", "w");
-    // ((RationalQuatPoly* )p)->topPolynomial.write(out);
-    // fclose(out);
-    // dumpRotInfo(&p, distField.mapBox, 100);
+    if (mode == "OBJBOX") {
+        Mesh m;
+        m.readOBJ(string(argv[6]));
 
-    // Finally we actually compute the Julia set
-    Real fillLevel = atof(argv[4]); // This is C in the equation
-    Real fillOffset = atof(argv[5]); // This is B in the equation
-    DistanceGuidedQuatMap map(&distField, p, fillLevel, fillOffset, 3);
+        AABB box(m.vertices[0], m.vertices[1]);
+        for (const VEC3F& v : m.vertices) {
+            box.max() = box.max().cwiseMax(v);
+            box.min() = box.min().cwiseMin(v);
+        }
 
-    int res = atoi(argv[3]);
-    VirtualGrid3DLimitedCache vg(res, res, res, distField.mapBox.min(), distField.mapBox.max(), &map);
-    Mesh m;
-    MC::march_cubes(&vg, m, true);
-    m.writeOBJ(argv[6]);
+        poly = randPolynomialInBox(box, minPower, maxPower, numRoots, false);
+    }
 
-    return 0;
+    if (mode == "SDF") {
+        ArrayGrid3D sdf(argv[6]);
+        sdf.mapBox.max() = VEC3F(0.5, 0.5, 0.5);
+        sdf.mapBox.min() = VEC3F(-0.5, -0.5, -0.5);
+
+        Real maxDist = atof(argv[7]);
+
+        poly = randPolynomialNearSurface(&sdf, minPower, maxPower, numRoots, maxDist);
+    }
+
+    FILE* out = fopen(outputFilename.c_str(), "w");
+    poly.write(out);
+    fclose(out);
+
+    PRINTF("Wrote polynomial with %d roots to %s", poly.totalRoots(), outputFilename.c_str())
+
+        return 0;
 }
-

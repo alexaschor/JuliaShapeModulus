@@ -29,6 +29,7 @@ public:
         max() += offset;
         min() += offset;
     }
+
 };
 
 class FieldFunction3D {
