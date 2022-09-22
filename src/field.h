@@ -30,6 +30,47 @@ public:
         min() += offset;
     }
 
+    vector<AABB> subdivideOctree() {
+        vector<AABB> octree;
+
+        //     CEIL    E---F
+        //           / |4|5|
+        //          /  +-+-+
+        //         /   |7|6|
+        //        /    H---G
+        // FLOOR A---B    /
+        //       |0|1|   /   point I is right smack dab in the middle
+        //       +-+-+  /
+        //       |3|2| /
+        //       D---C
+        //
+
+        VEC3F A = this->corner(TopLeftFloor);
+        VEC3F B = this->corner(TopRightFloor);
+        VEC3F C = this->corner(BottomRightFloor);
+        VEC3F D = this->corner(BottomLeftFloor);
+
+        VEC3F E = this->corner(TopLeftCeil);
+        VEC3F F = this->corner(TopRightCeil);
+        VEC3F G = this->corner(BottomRightCeil);
+        VEC3F H = this->corner(BottomLeftCeil);
+
+        VEC3F I = this->center();
+
+        octree.push_back(AABB(A, I)); // 0
+        octree.push_back(AABB(B, I)); // 1
+        octree.push_back(AABB(C, I)); // 2
+        octree.push_back(AABB(D, I)); // 3
+
+        octree.push_back(AABB(E, I)); // 4
+        octree.push_back(AABB(F, I)); // 5
+        octree.push_back(AABB(G, I)); // 6
+        octree.push_back(AABB(H, I)); // 7
+
+        return octree;
+
+    }
+
 };
 
 class FieldFunction3D {
@@ -86,7 +127,7 @@ public:
 
     virtual Real getFieldValue(const VEC3F& pos) const override {
         if (!hasMapBox) {
-            printf("Attempting getFieldValue on a Grid without a mapBox!\n");
+            printf("Attempting getFieldValue on a Grid3D without a mapBox!\n");
             exit(1);
         }
 
@@ -102,6 +143,15 @@ public:
         }
     }
 
+    virtual VEC3F gridToFieldCoords(const VEC3F& pos) const {
+        if (!hasMapBox) {
+            printf("Attempting cellToFieldCoords on a Grid3D without a mapBox!\n");
+            exit(1);
+        }
+
+        return mapBox.min() + pos.cwiseQuotient(VEC3F(xRes, yRes, zRes)).cwiseProduct(mapBox.span());
+    }
+
     virtual VEC3F getCellCenter(const VEC3I& pos) const {
         if (!hasMapBox) {
             printf("Attempting getCellCenter on a Grid3D without a mapBox!\n");
@@ -109,9 +159,9 @@ public:
         }
 
         VEC3F cellCornerToCenter = mapBox.span().cwiseQuotient(VEC3F(xRes, yRes, zRes))/2.0;
+        VEC3F posF(pos.x(), pos.y(), pos.z());
 
-        VEC3F posV3F(pos[0], pos[1], pos[2]);
-        return mapBox.min() + posV3F.cwiseQuotient(VEC3F(xRes, yRes, zRes)).cwiseProduct(mapBox.span()) + cellCornerToCenter;
+        return gridToFieldCoords(posF) + cellCornerToCenter;
     }
 
     virtual void writeCSV(string filename) {
@@ -354,7 +404,8 @@ private:
         VEC3F gridPointF(x, y, z);
         VEC3F gridResF(xRes, yRes, zRes);
         VEC3F fieldDelta = functionMax - functionMin;
-        VEC3F samplePoint = functionMin + (gridPointF.cwiseQuotient(gridResF - VEC3F(1,1,1)).cwiseProduct(fieldDelta));
+        // VEC3F samplePoint = functionMin + (gridPointF.cwiseQuotient(gridResF - VEC3F(1,1,1)).cwiseProduct(fieldDelta));
+        VEC3F samplePoint = functionMin + (gridPointF.cwiseQuotient(gridResF).cwiseProduct(fieldDelta));
 
         return samplePoint;
     }
@@ -473,14 +524,14 @@ public:
             return search->second;
         }
 
-        Real result = VirtualGrid3D::getf(x,y,z);
-        map[key] = result;
-
+        // We need to insert another value
         if (cacheQueue.size() >= maxSize) {
             map.erase(cacheQueue.front());
             cacheQueue.pop();
         }
 
+        Real result = VirtualGrid3D::getf(x,y,z);
+        map[key] = result;
         cacheQueue.push(key);
 
         numMisses++;

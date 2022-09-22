@@ -13,6 +13,48 @@ public:
     virtual QUATERNION operator()(QUATERNION q) const {
         return getFieldValue(q);
     }
+
+    virtual void writeCSVPairs(string filename, uint wRes, uint xRes, uint yRes, uint zRes, QUATERNION fieldMin, QUATERNION fieldMax) {
+        ofstream out;
+        out.open(filename);
+        if (out.is_open() == false)
+            return;
+
+        for (uint i = 0; i < wRes; ++i) {
+            for (uint j = 0; j < xRes; ++j) {
+                for (uint k = 0; k < yRes; ++k) {
+                    for (uint l = 0; l < zRes; ++l) {
+                        QUATERNION sampleOffset = fieldMax - fieldMin;
+                        sampleOffset.w() *= ((float) i / wRes);
+                        sampleOffset.x() *= ((float) j / xRes);
+                        sampleOffset.y() *= ((float) k / yRes);
+                        sampleOffset.z() *= ((float) l / zRes);
+
+                        QUATERNION samplePoint = fieldMin + sampleOffset;
+                        QUATERNION value = getFieldValue(samplePoint);
+
+                        out <<
+                            samplePoint.w() << "," <<
+                            samplePoint.x() << "," <<
+                            samplePoint.y() << "," <<
+                            samplePoint.z() << "," <<
+                            value.w()       << "," <<
+                            value.x()       << "," <<
+                            value.y()       << "," <<
+                            value.z()       << "," <<
+                        endl;
+
+
+                    }
+                }
+            }
+        }
+
+        printf("Wrote %d x %d x %d x %d field (%d values) to %s\n", wRes, xRes, yRes, zRes, (wRes * xRes * yRes * zRes), filename.c_str());
+
+        out.close();
+
+    }
 };
 
 class SimpleJuliaQuat: public QuatToQuatFn {
@@ -45,23 +87,15 @@ public:
 
 };
 
-class DistanceGuidedQuatMap: public FieldFunction3D {
+class QuaternionJuliaSet: public FieldFunction3D {
 public:
-    Grid3D* distanceField;
     QuatToQuatFn* p;
-
-    Real c;
-    Real b;
-
     int maxIterations;
     Real escape;
-    Real fitScale;
-
-    ArrayGrid3D* debugGrid;
 
 public:
-    DistanceGuidedQuatMap(Grid3D* distanceField,  QuatToQuatFn* p, Real c = 300, Real b = 0, int maxIterations = 3, Real escape = 20, Real fitScale = 1):
-        distanceField(distanceField), p(p), c(c), b(b), maxIterations(maxIterations), escape(escape), fitScale(fitScale) {}
+    QuaternionJuliaSet(QuatToQuatFn* p, int maxIterations = 3, Real escape = 20):
+        p(p), maxIterations(maxIterations), escape(escape) {}
 
     Real getFieldValue(const VEC3F& pos) const override {
         QUATERNION iterate(pos[0], pos[1], pos[2], 0);
@@ -69,67 +103,7 @@ public:
         int totalIterations = 0;
 
         while (magnitude < escape && totalIterations < maxIterations) {
-            // First lookup the radius we're going to project to and save the original
-            const Real distance = (*distanceField)(VEC3F(iterate[0], iterate[1], iterate[2]));
-            Real radius = exp(c * (distance - b));
-
-            QUATERNION original = iterate;
-            VEC3F iterateV3(iterate[0], iterate[1], iterate[2]);
-
-            // If we know it'll escape we can skip quaternion multiplication evaluation (unless we're scaling)
-            if (fitScale == 1 && radius > escape) {
-                magnitude = radius;
-                totalIterations++;
-                break;
-            }
-
             iterate = p->getFieldValue(iterate);
-
-            // If quaternion multiplication fails, revert back to original
-            if (iterate.anyNans()) {
-                if (debugGrid) (*debugGrid)(pos) = 2;
-                iterate = original;
-            }
-
-            // Try to normalize iterate, might produce infs or nans if magnitude
-            // is too small or zero if magnitude is too large
-            QUATERNION normedIterate = iterate;
-            normedIterate.normalize();
-
-            // Scale radius (accounting for fitScale)
-            // Fitscale is a scalar parameter to smoothly (ish) interpolate between the original P and
-            // the mapped version, unless you're doing that it should be always set to 1
-            radius = exp((1 - fitScale) * log(iterate.magnitude()) + (fitScale * log(radius)));
-
-            // Now that we know the radius we can break if it's too big:
-            if (radius > escape) {
-                if (debugGrid) (*debugGrid)(pos) = -1;
-                magnitude = radius;
-                totalIterations++;
-                break;
-            }
-
-            bool tooSmall = normedIterate.anyNans();
-            if (tooSmall) {
-                QUATERNION origNorm = original;
-                origNorm.normalize();
-                if (origNorm.anyNans()) {
-                    // Need to put it at radius but have no direction info
-                    iterate = QUATERNION(1,0,0,0) * radius;
-                    if (debugGrid) (*debugGrid)(pos) = 4;
-
-                    // This should never happen. If it does, your polynomial is
-                    // probably returing wayyy too large values that double
-                    // precision can't hold their inverse
-                } else {
-                    if (debugGrid) (*debugGrid)(pos) = 3;
-                    iterate = origNorm * radius;
-                }
-            } else {
-                iterate = normedIterate;
-                iterate *= radius;
-            }
-
             magnitude = iterate.magnitude();
 
             totalIterations++;
@@ -138,45 +112,68 @@ public:
         return log(magnitude);
     }
 
-    void sampleFit(string filename, int res, Real fitScale) {
-        ofstream out(filename);
+};
 
-        VEC3F min = distanceField->mapBox.min();
-        VEC3F max = distanceField->mapBox.max();
-        VEC3F inc = distanceField->mapBox.span()/res;
+class DistanceGuidedQuatFn: public QuatToQuatFn {
+public:
+    Grid3D* distanceField;
+    QuatToQuatFn* p;
 
-        PB_START("Sampling fit on %d x %d x %d grid...", res, res, res);
-        PB_PROGRESS(0);
+    Real c;
+    Real b;
 
-        for (Real x = min[0]; x < max[0]; x+=inc[0]) {
-            for (Real y = min[1]; y < max[1]; y+=inc[1]) {
-                for (Real z = min[2]; z < max[2]; z+=inc[2]) {
-                    QUATERNION samplePoint(x, y, z, 0);
+    Real fitScale;
 
-                    const Real distance = (*distanceField)(VEC3F(samplePoint[0], samplePoint[1], samplePoint[2]));
-                    const Real targetMag = exp( c * distance);
+public:
+    DistanceGuidedQuatFn(Grid3D* distanceField,  QuatToQuatFn* p, Real c = 300, Real b = 0, Real fitScale = 1):
+        distanceField(distanceField), p(p), c(c), b(b), fitScale(fitScale) {}
 
-                    bool nanOut = false;
-                    Real actualMag = p->getFieldValue(samplePoint).magnitude();
+    QUATERNION getFieldValue(QUATERNION q) const override {
+        // First lookup the radius we're going to project to and save the original
+        const Real distance = (*distanceField)(VEC3F(q[0], q[1], q[2]));
+        Real radius = exp(c * (distance - b));
 
-                    if (::isnan(actualMag)) {
-                        nanOut = true;
-                        actualMag = samplePoint.magnitude();
-                    }
+        QUATERNION original = q;
+        VEC3F iterateV3(q[0], q[1], q[2]);
 
-                    // const Real adjustedMag = ((1 - fitScale) * actualMag) + (fitScale * targetMag);
-                    const Real adjustedMag = exp((1 - fitScale) * log(actualMag)) + (fitScale * log(targetMag));
+        q = p->getFieldValue(q);
 
-                    if (!::isnan(distance)) out << targetMag << ", " << adjustedMag << ", " << (nanOut? 1 : 0) << endl;
-                }
-            }
-            PB_PROGRESS((x - min[0]) / (max[0] - min[0]));
+        // If quaternion multiplication fails, revert back to original
+        if (q.anyNans()) {
+            q = original;
         }
 
-        PB_END();
+        // Try to normalize q, might produce infs or nans if magnitude
+        // is too small or zero if magnitude is too large
+        QUATERNION normedIterate = q;
+        normedIterate.normalize();
 
-        out.close();
+        // Scale radius (accounting for fitScale)
+        // Fitscale is a scalar parameter to smoothly (ish) interpolate between the original P and
+        // the mapped version, so unless you're doing that it should be always set to 1
+        radius = exp((1 - fitScale) * log(q.magnitude()) + (fitScale * log(radius)));
 
+        bool tooSmall = normedIterate.anyNans();
+        if (tooSmall) {
+            QUATERNION origNorm = original;
+            origNorm.normalize();
+            if (origNorm.anyNans()) {
+                // This should never happen. If it does, your polynomial is
+                // probably returing wayyy too large values such that double
+                // precision can't hold their inverse. In this case, we need
+                // to put it at the specified radius but we don't have any
+                // direction info, so we just do the following:
+
+                q = QUATERNION(1,0,0,0) * radius;
+            } else {
+                q = origNorm * radius;
+            }
+        } else {
+            q = normedIterate;
+            q *= radius;
+        }
+
+        return q;
     }
 
 };

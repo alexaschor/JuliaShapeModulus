@@ -179,10 +179,45 @@ void dumpRotInfo(QuatToQuatFn* p, AABB range, int res) {
 
 int main(int argc, char *argv[]) {
 
-    if(argc != 7) {
+    if(argc != 10 && argc != 11) {
         cout << "USAGE: " << endl;
-        cout << "To create a shaped Julia set from a distance field:" << endl;
-        cout << " " << argv[0] << " <distance field> <4D top polynomial, or RANDOM> <output resolution> <fill level> <fill offset> <output OBJ>" << endl;
+        cout << "To create a shaped julia set from a distance field:" << endl;
+        cout << " " << argv[0] << " <SDF *.f3d> <P(q) *.poly4d, or the word RANDOM> <output resolution> <a> <b> <offset x> <offset y> <offset z> <output *.obj> <optional: octree specifier string>" << endl << endl;
+
+        cout << "    This will compute the 3D Julia quaternion Julia set of the function:" << endl;
+        cout << "        f(q) = r(q) * d(q)" << endl;
+        cout << "    Where:" << endl;
+        cout << "        r(q) = e^( a * SDF(q) + b )" << endl;
+        cout << "        d(q) = Normalized( P(q) )" << endl << endl;
+
+        cout << "    P(q) is the quaternion polynomial function, which determines the character of the fractal detail." << endl;
+        cout << "    a is a parameter which controls the thickness of the shell in which the chaotic effect has significant influence" << endl;
+        cout << "    on set membership, and b is a parameter which controls the position along the surface of the SDF of that shell." << endl << endl;
+
+        cout << "    The offset X, Y, and Z parameters move the origin of the dynamical system around in space, which causes" << endl;
+        cout << "    the Julia set to dissolve in interesting ways." << endl;
+
+        cout << "    The octree specifier string is an optional parameter useful for computing large Julia sets in parallel." << endl;
+        cout << "    You can select a box in an evenly-subdivided octree of arbitrary depth specified by a string of digits 0-7," << endl;
+        cout << "    laid out as follows:" << endl;
+
+        cout << "                 +---+" << endl;
+        cout << "               / |4|5|" << endl;
+        cout << "              /  +-+-+" << endl;
+        cout << "             /   |7|6|" << endl;
+        cout << "            /    +---+" << endl;
+        cout << "           +---+    / " << endl;
+        cout << "           |0|1|   /  " << endl;
+        cout << "           +-+-+  /   " << endl;
+        cout << "           |3|2| /    " << endl;
+        cout << "        ▲  +---+      " << endl;
+        cout << "        |             " << endl;
+        cout << "        Y X--▶        " << endl;
+        cout << "        Z ●           " << endl;
+        cout << "        (into page)   " << endl;
+
+        cout << "    Each character of the string will go one level deeper, so the string '5555' specifies the 1/16-edge length box at the far back corner." << endl;
+
         exit(0);
     }
 
@@ -200,10 +235,10 @@ int main(int argc, char *argv[]) {
     // exit(0);
 
     PRINT("NOTE: Setting simulation bounds to hard-coded values (not from distance field)");
-    distField.mapBox.max() = VEC3F(0.5, 0.5, 0.5);
     distField.mapBox.min() = VEC3F(-0.5, -0.5, -0.5);
+    distField.mapBox.max() = VEC3F(0.5, 0.5, 0.5);
 
-    QuatToQuatFn *p;
+    RationalQuatPoly *p;
 
     if (string(argv[2]) == "RANDOM") {
         // Create random polynomial
@@ -215,26 +250,79 @@ int main(int argc, char *argv[]) {
 
         p = new RationalQuatPoly(polyTop);
     } else {
+        PRINT("Loading polynomial from file...");
         POLYNOMIAL_4D polyTop(argv[2]);
         p = new RationalQuatPoly(polyTop);
     }
 
     // Save polynomial info for inspection later
-    // FILE* out = fopen("temp/p.poly4d", "w");
-    // ((RationalQuatPoly* )p)->topPolynomial.write(out);
-    // fclose(out);
+    FILE* out = fopen("temp/p.poly4d", "w");
+    p->topPolynomial.write(out);
+    PRINT("Wrote polynomial to temp/p.poly4d")
+        fclose(out);
     // dumpRotInfo(&p, distField.mapBox, 100);
 
     // Finally we actually compute the Julia set
-    Real fillLevel = atof(argv[4]); // This is C in the equation
-    Real fillOffset = atof(argv[5]); // This is B in the equation
-    DistanceGuidedQuatMap map(&distField, p, fillLevel, fillOffset, 3);
+    Real fillLevel = atof(argv[4]); // This is param a in the equation
+    Real fillOffset = atof(argv[5]); // This is param b in the equation
+
+    VEC3F offset3D(atof(argv[6]), atof(argv[7]), atof(argv[8]));
+
+    distField.mapBox.setCenter(offset3D);
+    for (unsigned int i = 0; i < p->topPolynomial.roots().size(); i++)
+        p->topPolynomial.rootsMutable()[i] = p->topPolynomial.roots()[i] + offset3D;
+
+    DistanceGuidedQuatFn map(&distField, p, fillLevel, fillOffset);
+    QuaternionJuliaSet julia(&map, 3, 20);
+
+    // Write out function input/output pairs for polynomial interpolation
+    // map.writeCSVPairs("map_pairs.csv", 50, 50, 50, 1, QUATERNION(-0.5, -0.5, -0.5, -0.5), QUATERNION(0.5, 0.5, 0.5, 0.5));
 
     int res = atoi(argv[3]);
-    VirtualGrid3DLimitedCache vg(res, res, res, distField.mapBox.min(), distField.mapBox.max(), &map);
+
+    AABB boundsBox(distField.mapBox);
+
+    VEC3F octreeCorrection(0,0,0); //FIXME
+
+    if (argc == 11) { // If an octree specifier string was given, we zoom in on just one box
+        char* octreeStr = argv[10];
+
+        for (size_t i = 0; i < strlen(octreeStr); ++i) {
+            int oIdx = octreeStr[i] - '0';
+            if (oIdx < 0 || oIdx > 7) {
+                PRINTF("Found character '%c' in octree specifier string. Valid characters are numbers 0-7, inclusive.\n", octreeStr[i]);
+                exit(1);
+            }
+
+            boundsBox = boundsBox.subdivideOctree()[oIdx];
+        }
+
+        // Pad by one grid cell to avoid gaps
+        VEC3F delta = boundsBox.span() / res;
+        boundsBox.max() += delta;
+        boundsBox.min() -= delta;
+    }
+
+
+    PRINTF("Computing Julia set with resolution %d, a=%f, b=%f, offset=(%f, %f, %f)\n", res, fillLevel, fillOffset, offset3D.x(), offset3D.y(), offset3D.z())
+        VirtualGrid3DLimitedCache vg(res, res, res, boundsBox.min(), boundsBox.max(), &julia);
+
     Mesh m;
     MC::march_cubes(&vg, m, true);
-    m.writeOBJ(argv[6]);
+    // MC::march_cubes(&vg, m, true);
+
+    // Currently march_cubes doesn't take the grid's mapBox into account; all vertices are
+    // placed in [ (0, xRes), (0, yRes), (0, zRes) ] space. TODO fix march_cubes to account for
+    // the mapBox, but for now we'll just manually transform it. Normals should be okay as they are.
+
+    for (uint i = 0; i < m.vertices.size(); ++i) {
+        VEC3F v = m.vertices[i];
+        m.vertices[i] = vg.gridToFieldCoords(v) + octreeCorrection;
+    }
+
+    m.writeOBJ(argv[9]);
+
+    PRINTD((Real) vg.numHits / vg.numQueries);
 
     return 0;
 }

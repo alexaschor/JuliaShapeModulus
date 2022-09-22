@@ -7,6 +7,7 @@
 
 #include "SETTINGS.h"
 #include "triangle.h"
+#include "field.h"
 
 using namespace std;
 
@@ -15,6 +16,12 @@ public:
     std::vector<VEC3F> vertices;
     std::vector<VEC3F> normals;
     std::vector<uint> indices;
+
+    Mesh(string filename) {
+        readOBJ(filename);
+    }
+
+    Mesh() {}
 
     int numFaces() {
         assert(indices.size() % 3 == 0);
