@@ -6,6 +6,7 @@
 #include "SETTINGS.h"
 #include "makelevelset3.h"
 #include "field.h"
+#include "projects/sdfGen/vec.h"
 
 #include <fstream>
 #include <iostream>
@@ -20,7 +21,7 @@ int main(int argc, char* argv[]) {
     if(argc < 2) {
         cout << "USAGE: " << endl;
         cout << "To generate an SDF from a mesh with automatically generated bounds:" << endl;
-        cout << " " << argv[0] << " <*.obj input> <resolution> <*.f3d output>\n";
+        cout << " " << argv[0] << " <*.obj input> <resolution> <*.f3d output> <padding cells>\n";
         cout << "To get the bounds for a mesh sequence:" << endl;
         cout << " " << argv[0] << " BOUNDS <obj 1> <obj 2> ... <obj N>\n";
         cout << "To generate an SDF from a mesh with specified bounds:" << endl;
@@ -93,7 +94,12 @@ int main(int argc, char* argv[]) {
     }
 
     int res = atoi(argv[2]);
+
     int padding = 1;
+
+    if (argc == 5) {
+        padding = atoi(argv[4]);
+    }
 
     //start with a massive inside out bound box.
     Vec3f min_box(numeric_limits<float>::max(),numeric_limits<float>::max(),numeric_limits<float>::max()),
@@ -191,11 +197,11 @@ int main(int argc, char* argv[]) {
     Vec3f unit(1,1,1);
     min_box -= padding*dx*unit;
     max_box += padding*dx*unit;
-    Vec3ui sizes = Vec3ui((max_box - min_box)/dx);
 
     // now re-do dx to include the padding as well
     lengths = max_box - min_box;
     dx = lengths[0] / res;
+    Vec3ui sizes = Vec3ui((max_box - min_box)/dx);
 
     cout << "Computing signed distance field.\n";
     SDFArray3F phi_grid;
