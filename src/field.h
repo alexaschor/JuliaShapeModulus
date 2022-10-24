@@ -16,12 +16,39 @@ public:
     AABB(VEC3F c1, VEC3F c2): AlignedBox<Real, 3>(c1.cwiseMin(c2), c1.cwiseMax(c2)) {}
     AABB(): AABB(VEC3F(0,0,0), VEC3F(0,0,0)){}
 
+    static AABB insideOut() {
+        Real realMax = numeric_limits<Real>::max();
+        Real realMin = numeric_limits<Real>::min();
+
+        AABB out{};
+        out.max() = VEC3F(realMin, realMin, realMin);
+        out.min() = VEC3F(realMax, realMax, realMax);
+
+        return out;
+    }
+
+    static VEC3F transferPoint(VEC3F pt, AABB from, AABB to) {
+        if (!from.contains(pt)) {
+            PRINT("AABB:transferPoint called, but the point is not contained by the origin box!");
+            exit(1);
+        }
+
+        VEC3F proportional = (pt - from.min()).cwiseQuotient(from.span());
+
+        return to.min() + proportional.cwiseProduct(to.span());
+    }
+
     VEC3F span() const {
         return max()-min();
     }
 
     VEC3F clamp(VEC3F pos) const {
         return pos.cwiseMax(min()).cwiseMin(max());
+    }
+
+    void include(VEC3F p) {
+        max() = max().cwiseMax(p);
+        min() = min().cwiseMin(p);
     }
 
     void setCenter(VEC3F newCenter) {
@@ -81,6 +108,8 @@ public:
 
     FieldFunction3D():fieldFunction(nullptr) {} // Only to be used by subclasses
 
+    virtual ~FieldFunction3D(){}
+
     virtual Real getFieldValue(const VEC3F& pos) const {
         return fieldFunction(pos);
     }
@@ -88,6 +117,19 @@ public:
     virtual Real operator()(const VEC3F& pos) const {
         return getFieldValue(pos);
     }
+};
+
+
+class ConstantFunction3D: public FieldFunction3D {
+public:
+    Real value;
+    ConstantFunction3D( Real value ): value(value) {}
+
+    virtual Real getFieldValue(const VEC3F& pos) const {
+        (void) pos;
+        return value;
+    }
+
 };
 
 class Grid3D: public FieldFunction3D {
@@ -424,10 +466,26 @@ public:
             this->supportsNonIntegerIndices = true;
         }
 
-    // Virtually (shallow) downsample an existing grid
-    // VirtualGrid3D(uint xRes, uint yRes, uint zRes, Grid3D *other) {
-    // TODO implement
-    // }
+    // Virtually (shallow) resample an existing grid
+    VirtualGrid3D(uint xRes, uint yRes, uint zRes, Grid3D *other):
+        fieldFunction(other)
+    {
+        if (!other->hasMapBox) {
+            PRINTF("Attempting to virtually resample a Grid3D without a mapBox!\n");
+            exit(1);
+        }
+
+        this->functionMin = other->mapBox.min();
+        this->functionMax = other->mapBox.max();
+        this->setMapBox(other->mapBox);
+
+        this->xRes = xRes;
+        this->yRes = yRes;
+        this->zRes = zRes;
+
+        this->supportsNonIntegerIndices = true;
+
+    }
 
     virtual Real get(uint x, uint y, uint z) const override {
         return getf(x, y, z);

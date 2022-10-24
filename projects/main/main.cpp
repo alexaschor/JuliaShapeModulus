@@ -1,7 +1,10 @@
+#include <algorithm>
 #include <iostream>
 #include <fstream>
 #include <chrono>
 #include <cstdio>
+#include <limits>
+#include <stdio.h>
 #include <cmath>
 #include <random>
 
@@ -158,7 +161,7 @@ POLYNOMIAL_4D randPolynomialNearSurfaceBlueNoise(Grid3D* sdf, Real minPower, Rea
 
 void dumpRotInfo(QuatToQuatFn* p, AABB range, int res) {
     // This is hacky, I'm using three scalar fields where
-    // I really should just make a vector field.
+    // I really should just make a vector field class.
     QuatQuatRotField r(p, 0);
     QuatQuatRotField g(p, 1);
     QuatQuatRotField b(p, 2);
@@ -176,6 +179,180 @@ void dumpRotInfo(QuatToQuatFn* p, AABB range, int res) {
     VirtualGrid3D gm(res, res, res, range.min(), range.max(), &mag);
     gm.writeF3D("temp/mag.f3d", true);
 }
+
+void loadPointWeightsFromCSVAndLiftInto3D(ArrayGrid3D &grid, Grid3D* distField, string filename) {
+    ifstream in;
+    string line;
+    in.open(filename);
+
+    for (uint i = 0; i < grid.totalCells(); ++i) {
+        grid[i] = -1;
+    }
+
+    vector<VEC3F> points;
+    vector<Real>  weights;
+    AABB meshBox{};// = AABB::insideOut();
+
+    while( !in.eof() ) {
+        in >> line;
+        Real x, y, z, weight;
+        sscanf(line.c_str(), "%lf,%lf,%lf,%lf", &x, &y, &z, &weight);
+
+        // XXX For now we get the data as 1 = normal, 0 = fractal
+        // XXX But we want 0 = normal, 1 = fractal
+        weight = 1 - weight;
+
+        VEC3F v(x,y,z);
+        meshBox.include(v);
+
+        if (weight != 0) {
+            points.push_back(v);
+            weights.push_back(weight);
+        }
+
+    }
+
+    grid.setMapBox(meshBox);
+    PRINTF("Got %lu point weights\n", weights.size());
+    PRINTV3(meshBox.min());
+    PRINTV3(meshBox.max());
+    PRINTV3(meshBox.span());
+
+    AABB meshTargetBox(VEC3F(-0.165,-0.165,-0.165), VEC3F(0.165,0.165,0.165));
+
+    grid.setMapBox(distField->mapBox);
+    for (uint i=0; i < points.size(); ++i) {
+        points[i] = AABB::transferPoint(points[i], meshBox, meshTargetBox);
+    }
+
+    PRINTV3(grid.mapBox.min());
+    PRINTV3(grid.mapBox.max());
+    PRINTV3(meshTargetBox.min());
+    PRINTV3(meshTargetBox.max());
+
+    PB_START("Propogate surface weights to 3D...");
+
+    Real propogation_distance = 0.01;
+    Real pd_squared = propogation_distance * propogation_distance;
+
+    for (uint i = 0; i < grid.xRes; ++i) {
+#pragma omp parallel for
+        for (uint j = 0; j < grid.yRes; ++j) {
+            for (uint k = 0; k < grid.yRes; ++k) {
+                VEC3F cellCenter = grid.getCellCenter(VEC3I(i, j, k));
+
+                bool inStroke = false;
+                for (VEC3F pt : points) {
+                    if ((pt - cellCenter).squaredNorm() < pd_squared) {
+                        inStroke = true;
+                        break;
+                    }
+                }
+
+                grid(cellCenter) = inStroke ? 7.00 : 500.00;
+
+            }
+        }
+        PB_PROGRESS((Real) i / grid.xRes);
+    }
+
+    PB_END();
+
+}
+
+void loadPointWeightsFromCSVAndLiftInto3DSmooth(ArrayGrid3D &grid, Grid3D* distField, string filename) {
+    ifstream in;
+    string line;
+    in.open(filename);
+
+    for (uint i = 0; i < grid.totalCells(); ++i) {
+        grid[i] = -1;
+    }
+
+    vector<VEC3F> points;
+    vector<Real>  weights;
+    AABB meshBox{};// = AABB::insideOut();
+
+    while( !in.eof() ) {
+        in >> line;
+        Real x, y, z, weight;
+        sscanf(line.c_str(), "%lf,%lf,%lf,%lf", &x, &y, &z, &weight);
+
+        // XXX For now we get the data as 1 = normal, 0 = fractal
+        // XXX But we want 0 = normal, 1 = fractal
+        weight = 1 - weight;
+
+        VEC3F v(x,y,z);
+        meshBox.include(v);
+
+        if (weight != 0) {
+            points.push_back(v);
+            weights.push_back(weight);
+        }
+
+    }
+
+
+    grid.setMapBox(meshBox);
+    PRINTF("Got %lu point weights\n", weights.size());
+    PRINTV3(meshBox.min());
+    PRINTV3(meshBox.max());
+    PRINTV3(meshBox.span());
+
+    for (uint i=0; i < points.size(); ++i) {
+        grid(points[i]) = weights[i];
+    }
+
+    grid.setMapBox(distField->mapBox);
+    for (uint i=0; i < points.size(); ++i) {
+        points[i] = AABB::transferPoint(points[i], meshBox, distField->mapBox);
+    }
+
+    grid.writeF3D("populated.f3d", true);
+
+    // For now we'll assume that a field value of 1 means
+    // a high A, zero means a lower A, and all -1s must be
+    // eliminated.
+
+
+    PB_START("Propogate surface weights to 3D...");
+
+    Real propogation_distance = 0.005;
+
+    for (uint i = 0; i < grid.xRes; ++i) {
+#pragma omp parallel for
+        for (uint j = 0; j < grid.yRes; ++j) {
+            for (uint k = 0; k < grid.yRes; ++k) {
+                VEC3F cellCenter = grid.getCellCenter(VEC3I(i, j, k));
+
+                if (grid.at(i,j,k) == -1) {
+
+                    Real minDistVal = 0;
+                    Real minDist = numeric_limits<Real>::max();
+
+                    for (uint i=0; i < points.size(); ++i) {
+                        Real dist = (points[i] - cellCenter).squaredNorm();
+                        if (dist < minDist) {
+                            minDist = dist;
+                            minDistVal = weights[i] * max(0.0, 1 - (dist / propogation_distance));
+                        }
+                    }
+
+                    grid.at(i,j,k) = minDistVal;
+                }
+
+            }
+        }
+        PB_PROGRESS((Real) i / grid.xRes);
+    }
+
+    PB_END();
+
+    grid.writeF3D("propogated.f3d", true);
+
+
+}
+
 
 int main(int argc, char *argv[]) {
 
@@ -229,7 +406,6 @@ int main(int argc, char *argv[]) {
     InterpolationGrid distField(&distFieldCoarse, InterpolationGrid::LINEAR);
     distField.mapBox.setCenter(VEC3F(0,0,0));
 
-
     // Save radius-membership relationship
     // sampleSphereIntersection(&distField, 0, 0.6, 2500, 100000, "inside.csv");
     // exit(0);
@@ -258,32 +434,27 @@ int main(int argc, char *argv[]) {
     // Save polynomial info for inspection later
     FILE* out = fopen("temp/p.poly4d", "w");
     p->topPolynomial.write(out);
-    PRINT("Wrote polynomial to temp/p.poly4d")
-        fclose(out);
+    PRINT("Wrote polynomial to temp/p.poly4d");
+    fclose(out);
+
     // dumpRotInfo(&p, distField.mapBox, 100);
 
     // Finally we actually compute the Julia set
     Real fillLevel = atof(argv[4]); // This is param a in the equation
     Real fillOffset = atof(argv[5]); // This is param b in the equation
 
+    // Offset roots and distance field to reproduce QUIJIBO dissolution
+    // effect
     VEC3F offset3D(atof(argv[6]), atof(argv[7]), atof(argv[8]));
 
     distField.mapBox.setCenter(offset3D);
     for (unsigned int i = 0; i < p->topPolynomial.roots().size(); i++)
         p->topPolynomial.rootsMutable()[i] = p->topPolynomial.roots()[i] + offset3D;
 
-    DistanceGuidedQuatFn map(&distField, p, fillLevel, fillOffset);
-    QuaternionJuliaSet julia(&map, 3, 20);
-
-    // Write out function input/output pairs for polynomial interpolation
-    // map.writeCSVPairs("map_pairs.csv", 50, 50, 50, 1, QUATERNION(-0.5, -0.5, -0.5, -0.5), QUATERNION(0.5, 0.5, 0.5, 0.5));
-
     int res = atoi(argv[3]);
 
-    AABB boundsBox(distField.mapBox);
-
-    VEC3F octreeCorrection(0,0,0); //FIXME
-
+    // Set up simulation bounds, taking octree zoom into account
+    AABB boundsBox(distField.mapBox.min(), distField.mapBox.max());
     if (argc == 11) { // If an octree specifier string was given, we zoom in on just one box
         char* octreeStr = argv[10];
 
@@ -303,13 +474,92 @@ int main(int argc, char *argv[]) {
         boundsBox.min() -= delta;
     }
 
+    PRINTF("Computing Julia set with resolution %d, a=%f, b=%f, offset=(%f, %f, %f)\n", res, fillLevel, fillOffset, offset3D.x(), offset3D.y(), offset3D.z());
 
-    PRINTF("Computing Julia set with resolution %d, a=%f, b=%f, offset=(%f, %f, %f)\n", res, fillLevel, fillOffset, offset3D.x(), offset3D.y(), offset3D.z())
-        VirtualGrid3DLimitedCache vg(res, res, res, boundsBox.min(), boundsBox.max(), &julia);
+    // Make fields for a and b
+    ConstantFunction3D b(fillOffset);
 
+    // ConstantFunction3D a(fillLevel);
+
+    // ArrayGrid3D a_fromVerts_coarse(100, 100, 100);
+    // loadPointWeightsFromCSVAndLiftInto3D(a_fromVerts_coarse, &distField, "/Users/als/Projects/cpp/DistFieldMap/DistFieldMap/vertices.csv");
+
+    ArrayGrid3D a_fromVerts_coarse("./propogated.f3d");
+    InterpolationGrid a_fromVerts_smooth(&a_fromVerts_coarse, InterpolationGrid::LINEAR);
+
+    // VirtualGrid3D(300, 300, 300, &a_fromVerts_smooth).writeF3D("propogated.f3d", true);
+
+    // a_fromVerts_coarse.writeF3D("propogated.f3d", true);
+    // exit(1);
+
+    // ArrayGrid3D aCoarse("./propogated.f3d"); // Load in, on scale 0 = no fractal to 1 = lots fractal
+    // for (uint i=0; i < aCoarse.totalCells(); ++i) {
+    //     aCoarse[i] = -20 + ((1 - aCoarse[i]) * 30);
+    // }
+    // InterpolationGrid a(&aCoarse, InterpolationGrid::LINEAR);
+    // a.setMapBox(distField.mapBox);
+
+    // a.writeF3D("temp/a.f3d");
+    // exit(1);
+
+
+    // Smooth transition across X axis
+    FieldFunction3D a_xSmooth
+        (
+            [](VEC3F pos) {
+                Real transitionStart = -0.33;
+                Real transitionEnd = 0.33;
+                Real levelStart = 7;
+                Real levelEnd = 500;
+
+                Real xp = (pos.x() - transitionStart) / (transitionEnd - transitionStart);
+                xp = max(0.0, min(1.0, xp));
+
+                // Make cubic
+                xp = pow(xp, 7);
+
+                // Real d = (3 * xp * xp) - (2 * xp * xp * xp);
+                // return (1 - d)*levelStart + (d * levelEnd);
+
+                return (1 - xp)*levelStart + (xp * levelEnd);
+            }
+        );
+
+    FieldFunction3D a_hardSphere
+        (
+            [](VEC3F pos) {
+
+                VEC3F center(0,0,0.5);
+
+                if ((pos - center).squaredNorm() < 0.04) {
+                    return 7.0;
+                }
+
+                return 500.0;
+
+            }
+        );
+
+    // VirtualGrid3D(100, 100, 100, distField.mapBox.min(), distField.mapBox.max(), &a).writeF3D("temp/a.f3d", true);
+    // exit(1);
+
+    // DistanceGuidedQuatFn map(&distField, p, &a_xSmooth, &b);
+    // DistanceGuidedQuatFn map(&distField, p, &a_hardSphere, &b);
+    DistanceGuidedQuatFn map(&distField, p, &a_fromVerts_smooth, &b);
+
+    // Simple gradient
+
+    // ArrayGrid3D a_grid(100, 100, 100);
+    // loadPointWeightsFromCSVAndLiftInto3D(a_grid, &distField, "/Users/als/Projects/cpp/DistFieldMap/DistFieldMap/vertices.csv");
+    // exit(1);
+
+    // DistanceGuidedQuatFn map(&distField, p, &a, &b);
+
+    QuaternionJuliaSet julia(&map, 3, 20);
+
+    VirtualGrid3DLimitedCache vg(res, res, res, boundsBox.min(), boundsBox.max(), &julia);
     Mesh m;
     MC::march_cubes(&vg, m, true);
-    // MC::march_cubes(&vg, m, true);
 
     // Currently march_cubes doesn't take the grid's mapBox into account; all vertices are
     // placed in [ (0, xRes), (0, yRes), (0, zRes) ] space. TODO fix march_cubes to account for
@@ -317,7 +567,7 @@ int main(int argc, char *argv[]) {
 
     for (uint i = 0; i < m.vertices.size(); ++i) {
         VEC3F v = m.vertices[i];
-        m.vertices[i] = vg.gridToFieldCoords(v) + octreeCorrection;
+        m.vertices[i] = vg.gridToFieldCoords(v);
     }
 
     m.writeOBJ(argv[9]);

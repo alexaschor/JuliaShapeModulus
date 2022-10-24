@@ -119,22 +119,36 @@ public:
     Grid3D* distanceField;
     QuatToQuatFn* p;
 
-    Real c;
-    Real b;
+    FieldFunction3D* a;
+    FieldFunction3D* b;
+
+    // When a or b are constant fields, we could use a
+    // ConstantFunction3D, but to save the overhead of
+    // a lookup we have a special mode for constant values
+    bool hasConstantA;
+    bool hasConstantB;
+    Real constantA;
+    Real constantB;
 
     Real fitScale;
 
 public:
-    DistanceGuidedQuatFn(Grid3D* distanceField,  QuatToQuatFn* p, Real c = 300, Real b = 0, Real fitScale = 1):
-        distanceField(distanceField), p(p), c(c), b(b), fitScale(fitScale) {}
+    DistanceGuidedQuatFn(Grid3D* distanceField,  QuatToQuatFn* p, Real a = 300, Real b = 0, Real fitScale = 1):
+        distanceField(distanceField), p(p), hasConstantA(true), hasConstantB(true), constantA(a), constantB(b), fitScale(fitScale) {}
+
+    DistanceGuidedQuatFn(Grid3D* distanceField,  QuatToQuatFn* p, FieldFunction3D* a, FieldFunction3D* b, Real fitScale = 1):
+        distanceField(distanceField), p(p), a(a), b(b), hasConstantA(false), hasConstantB(false), fitScale(fitScale) {}
 
     QUATERNION getFieldValue(QUATERNION q) const override {
         // First lookup the radius we're going to project to and save the original
-        const Real distance = (*distanceField)(VEC3F(q[0], q[1], q[2]));
-        Real radius = exp(c * (distance - b));
 
         QUATERNION original = q;
         VEC3F iterateV3(q[0], q[1], q[2]);
+        const Real distance = (*distanceField)(iterateV3);
+
+        Real radius = exp(
+            hasConstantA ? constantA : a->getFieldValue(iterateV3) *
+            (distance - (hasConstantB ? constantB : b->getFieldValue(iterateV3))));
 
         q = p->getFieldValue(q);
 
@@ -161,8 +175,8 @@ public:
                 // This should never happen. If it does, your polynomial is
                 // probably returing wayyy too large values such that double
                 // precision can't hold their inverse. In this case, we need
-                // to put it at the specified radius but we don't have any
-                // direction info, so we just do the following:
+                // to put the iterate at the specified radius but we don't
+                // have any direction info, so we just do the following:
 
                 q = QUATERNION(1,0,0,0) * radius;
             } else {
@@ -190,17 +204,9 @@ public:
         QUATERNION input(pos[0], pos[1], pos[2], 0);
         QUATERNION transformed = func->getFieldValue(input);
 
-        // PRINTV4(transformed);
-        // PRINTE(transformed.magnitude());
-
         QUATERNION normalized = transformed;
 
         normalized.normalize();
-        // PRINTV4(normalized);
-        //
-        // PRINTE(normalized.magnitude());
-        //
-        // if(normalized.magnitude() == 0) exit(1);
 
         return normalized[i];
     }
