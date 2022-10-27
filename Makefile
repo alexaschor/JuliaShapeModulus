@@ -3,7 +3,7 @@ LIBS = Quaternion
 
 include ./projects/include.mk
 
-all: sdfGen main rootMorph genPoly
+all: sdfGen main rootMorph genPoly optimizeComplexity
 
 sdfGen:
 	cd projects/sdfGen; make
@@ -16,6 +16,9 @@ rootMorph:
 
 genPoly:
 	cd projects/genPoly; make
+
+optimizeComplexity:
+	cd projects/optimizeComplexity; make
 
 clean:
 	@-for d in $(LIBS); do (echo -e "cd ./lib/$$d; rm *.o";cd ./lib/$$d; rm *.o; cd ../..); done

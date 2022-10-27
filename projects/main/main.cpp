@@ -507,19 +507,21 @@ int main(int argc, char *argv[]) {
     FieldFunction3D a_xSmooth
         (
             [](VEC3F pos) {
-                Real transitionStart = -0.33;
-                Real transitionEnd = 0.33;
-                Real levelStart = 7;
+                Real transitionStart = -0.3;
+                Real transitionEnd = 0.3;
+                Real levelStart = 10;
                 Real levelEnd = 500;
 
-                Real xp = (pos.x() - transitionStart) / (transitionEnd - transitionStart);
+                Real xp = (pos.z() - transitionStart) / (transitionEnd - transitionStart);
                 xp = max(0.0, min(1.0, xp));
 
                 // Make cubic
-                xp = pow(xp, 7);
+                xp = pow(xp, 3);
 
                 // Real d = (3 * xp * xp) - (2 * xp * xp * xp);
                 // return (1 - d)*levelStart + (d * levelEnd);
+
+                // return (pos.z() < 0 ? 30.0: 500.0);
 
                 return (1 - xp)*levelStart + (xp * levelEnd);
             }
@@ -540,12 +542,12 @@ int main(int argc, char *argv[]) {
             }
         );
 
-    // VirtualGrid3D(100, 100, 100, distField.mapBox.min(), distField.mapBox.max(), &a).writeF3D("temp/a.f3d", true);
+    VirtualGrid3D(100, 100, 100, distField.mapBox.min(), distField.mapBox.max(), &a_xSmooth).writeF3D("temp/a.f3d", true);
     // exit(1);
 
-    // DistanceGuidedQuatFn map(&distField, p, &a_xSmooth, &b);
+    DistanceGuidedQuatFn map(&distField, p, &a_xSmooth, &b);
     // DistanceGuidedQuatFn map(&distField, p, &a_hardSphere, &b);
-    DistanceGuidedQuatFn map(&distField, p, &a_fromVerts_smooth, &b);
+    // DistanceGuidedQuatFn map(&distField, p, &a_fromVerts_smooth, &b);
 
     // Simple gradient
 

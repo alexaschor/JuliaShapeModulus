@@ -146,9 +146,14 @@ public:
         VEC3F iterateV3(q[0], q[1], q[2]);
         const Real distance = (*distanceField)(iterateV3);
 
-        Real radius = exp(
-            hasConstantA ? constantA : a->getFieldValue(iterateV3) *
-            (distance - (hasConstantB ? constantB : b->getFieldValue(iterateV3))));
+        Real aValue = (hasConstantA ? constantA : a->getFieldValue(iterateV3));
+        Real bValue = (hasConstantB ? constantB : b->getFieldValue(iterateV3)) ;
+
+        // PRINTD(aValue);
+        // PRINTD(bValue);
+
+
+        Real radius = exp( aValue * (distance - bValue ));
 
         q = p->getFieldValue(q);
 

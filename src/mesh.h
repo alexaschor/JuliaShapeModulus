@@ -90,6 +90,14 @@ public:
         return out;
     }
 
+    Real computeSurfaceArea() {
+        Real area = 0;
+        for (int i = 0; i < numFaces(); ++i) {
+            area += triangle(i).area();
+        }
+        return area;
+    }
+
 };
 
 #endif
