@@ -15,8 +15,6 @@
 #include "field.h"
 #include "Quaternion/QUATERNION.h"
 #include "Quaternion/POLYNOMIAL_4D.h"
-#include "igl/dual_contouring.h"
-#include "igl/writeOBJ.h"
 
 #include "julia.h"
 
