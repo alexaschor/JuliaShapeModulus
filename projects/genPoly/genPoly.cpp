@@ -1,3 +1,4 @@
+#include "Quaternion/QUATERNION.h"
 #include "SETTINGS.h"
 #include "field.h"
 #include "mesh.h"
@@ -149,62 +150,158 @@ POLYNOMIAL_4D randPolynomialNearSurfaceBlueNoise(Grid3D* sdf, Real minPower, Rea
 
 int main(int argc, char* argv[]) {
 
-    if(argc < 6) {
+    if(argc == 1) {
         cout << "USAGE: " << endl;
+        cout << "-----------------------------------------------" << endl;
+
+        cout << "To inspect a *.p4d polynomial:" << endl;
+        cout << " " << argv[0] << " INS <*.p4d file> " << endl;;
+
+        cout << "-----------------------------------------------" << endl;
+
         cout << "To generate a random polynomial in a bounding box:" << endl;
-        cout << " " << argv[0] << " <numRoots> <min power> <max power> <*.poly output> BOX <x min> <y min> <z min> <x max> <y max> <z max>" << endl;;
+        cout << " " << argv[0] << " GEN <numRoots> <min power> <max power> <*.p4d output> BOX <x min> <y min> <z min> <x max> <y max> <z max>" << endl;;
 
         cout << "To generate a random polynomial in an OBJ's bounding box:" << endl;
-        cout << " " << argv[0] << " <numRoots> <min power> <max power> <*.poly output> OBJBOX <*.obj model>" << endl;;
+        cout << " " << argv[0] << " GEN <numRoots> <min power> <max power> <*.p4d output> OBJBOX <*.obj model>" << endl;;
 
         cout << "To generate a random polynomial near an SDF's surface:" << endl;
-        cout << " " << argv[0] << " <numRoots> <min power> <max power> <*.poly output> SDF <*.f3d sdf> <max distance>" << endl;;
+        cout << " " << argv[0] << " GEN <numRoots> <min power> <max power> <*.p4d output> SDF <*.f3d sdf> <max distance>" << endl;;
+
+        cout << "-----------------------------------------------" << endl;
+
+        cout << "To generate a polynomial whose roots are the union of two input polynomials:" << endl;
+        cout << " " << argv[0] << " ADD <first *.p4d input> <second *.p4d input> <*.p4d output> " << endl;;
+
+        cout << "-----------------------------------------------" << endl;
+
+        cout << "To scale the positions of a polynomial's roots in space:" << endl;
+        cout << " " << argv[0] << " SCALE <*.p4d input> <factor> <*.p4d output>" << endl;;
+
+        cout << "-----------------------------------------------" << endl;
+
         exit(-1);
     }
+    if (string(argv[1]) == "ADD") {
+        PRINTF("Reading %s...\n", argv[2]);
+        POLYNOMIAL_4D p1(argv[2]);
+        PRINTF("Got polynomial with %d roots.\n", p1.totalRoots());
 
-    POLYNOMIAL_4D poly;
+        PRINTF("Reading %s...\n", argv[3]);
+        POLYNOMIAL_4D p2(argv[3]);
+        PRINTF("Got polynomial with %d roots.\n", p2.totalRoots());
 
-    int numRoots = atoi(argv[1]);
-    int minPower = atoi(argv[2]);
-    int maxPower = atoi(argv[3]);
-
-    string outputFilename(argv[4]);
-
-    string mode(argv[5]);
-
-    if (mode == "BOX") {
-        AABB box(VEC3F(atof(argv[6]), atof(argv[7]), atof(argv[8])), VEC3F(atof(argv[9]), atof(argv[10]), atof(argv[11])));
-        poly = randPolynomialInBox(box, minPower, maxPower, numRoots, false);
-    }
-
-    if (mode == "OBJBOX") {
-        Mesh m;
-        m.readOBJ(string(argv[6]));
-
-        AABB box(m.vertices[0], m.vertices[1]);
-        for (const VEC3F& v : m.vertices) {
-            box.max() = box.max().cwiseMax(v);
-            box.min() = box.min().cwiseMin(v);
+        for (auto q : p2.rootsMutable()) {
+            p1.addRoot(q);
         }
 
-        poly = randPolynomialInBox(box, minPower, maxPower, numRoots, false);
-    }
+        PRINTF("Writing %d roots to %s...\n", p1.totalRoots(), argv[4]);
 
-    if (mode == "SDF") {
-        ArrayGrid3D sdf(argv[6]);
-        sdf.mapBox.max() = VEC3F(0.5, 0.5, 0.5);
-        sdf.mapBox.min() = VEC3F(-0.5, -0.5, -0.5);
+        FILE* out = fopen(argv[4], "w");
+        p1.write(out);
+        fclose(out);
+    } else if (string(argv[1]) == "SCALE") {
+        PRINTF("Reading %s...\n", argv[2]);
+        POLYNOMIAL_4D p1(argv[2]);
+        PRINTF("Got polynomial with %d roots.\n", p1.totalRoots());
 
-        Real maxDist = atof(argv[7]);
 
-        poly = randPolynomialNearSurface(&sdf, minPower, maxPower, numRoots, maxDist);
-    }
+        Real factor = atof(argv[3]);
+        PRINTF("Scaling all roots by a factor f=%f\n", factor);
 
-    FILE* out = fopen(outputFilename.c_str(), "w");
-    poly.write(out);
-    fclose(out);
+        for (auto& q : p1.rootsMutable()) {
+            q *= factor;
+        }
 
-    PRINTF("Wrote polynomial with %d roots to %s", poly.totalRoots(), outputFilename.c_str())
+        PRINTF("Writing %d roots to %s...\n", p1.totalRoots(), argv[4]);
+
+        FILE* out = fopen(argv[4], "w");
+        p1.write(out);
+        fclose(out);
+    } else if (string(argv[1]) == "GEN") {
+        POLYNOMIAL_4D poly;
+        int numRoots = atoi(argv[2]);
+        int minPower = atoi(argv[3]);
+        int maxPower = atoi(argv[4]);
+
+        string outputFilename(argv[5]);
+
+        string mode(argv[6]);
+
+        if (mode == "BOX") {
+            AABB box(VEC3F(atof(argv[7]), atof(argv[8]), atof(argv[9])), VEC3F(atof(argv[10]), atof(argv[11]), atof(argv[12])));
+            poly = randPolynomialInBox(box, minPower, maxPower, numRoots, false);
+        }
+
+        if (mode == "OBJBOX") {
+            Mesh m;
+            m.readOBJ(string(argv[7]));
+
+            AABB box(m.vertices[0], m.vertices[1]);
+            for (const VEC3F& v : m.vertices) {
+                box.max() = box.max().cwiseMax(v);
+                box.min() = box.min().cwiseMin(v);
+            }
+
+            poly = randPolynomialInBox(box, minPower, maxPower, numRoots, false);
+        }
+
+        if (mode == "SDF") {
+            ArrayGrid3D sdf(argv[7]);
+            sdf.mapBox.max() = VEC3F(0.5, 0.5, 0.5);
+            sdf.mapBox.min() = VEC3F(-0.5, -0.5, -0.5);
+
+            Real maxDist = atof(argv[8]);
+
+            poly = randPolynomialNearSurface(&sdf, minPower, maxPower, numRoots, maxDist);
+        }
+
+        FILE* out = fopen(outputFilename.c_str(), "w");
+        poly.write(out);
+        fclose(out);
+
+        PRINTF("Wrote polynomial with %d roots to %s", poly.totalRoots(), outputFilename.c_str());
 
         return 0;
+    } else if (string(argv[1]) == "INS") {
+        PRINT("Reading polynomial...");
+        POLYNOMIAL_4D poly(argv[2]);
+
+        PRINTF("Got polynomial with %d roots:\n", poly.totalRoots());
+
+        AABB bounds = AABB::insideOut();
+        Real maxW = numeric_limits<Real>::min(), minW = numeric_limits<Real>::max();
+        Real minRad = minW, maxRad = maxW;
+        Real minPower = minW, maxPower = maxW;
+
+        int i = 0;
+        for (QUATERNION root : poly.roots()) {
+            VEC3F rootV3(root.x(), root.y(), root.z());
+
+            bounds.include(rootV3);
+            if (root.w() > maxW) maxW = root.w();
+            if (root.w() < minW) minW = root.w();
+
+            if (root.magnitude() > maxRad) maxRad = root.magnitude();
+            if (root.magnitude() < minRad) minRad = root.magnitude();
+
+            if (poly.powers()[i] > maxPower) maxPower = poly.powers()[i];
+            if (poly.powers()[i] < minPower) minPower = poly.powers()[i];
+
+            i++;
+        }
+
+        PRINTF("Root power min: %f\n", minPower);
+        PRINTF("Root power max: %f\n", maxPower);
+
+        PRINTF("Radius min: %f\n", minRad);
+        PRINTF("Radius max: %f\n", maxRad);
+
+        PRINTF("Position min: (%.5f, %.5f, %.5f, %.5f)\n", minW, bounds.min().x(), bounds.min().y(), bounds.min().z()) ;
+        PRINTF("Position max: (%.5f, %.5f, %.5f, %.5f)\n", maxW, bounds.max().x(), bounds.max().y(), bounds.max().z()) ;
+
+        PRINTF("Bounding box edges: (%.5f, %.5f, %.5f, %.5f)\n", maxW - minW, bounds.span().x(), bounds.span().y(), bounds.span().z());
+
+    }
+
 }

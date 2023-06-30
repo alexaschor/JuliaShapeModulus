@@ -117,8 +117,100 @@ public:
     virtual Real operator()(const VEC3F& pos) const {
         return getFieldValue(pos);
     }
+
+    virtual VEC3F getNumericalGradient(const VEC3F& pos, Real eps) const {
+        Real x = pos[0];
+        Real y = pos[1];
+        Real z = pos[2];
+
+        Real xGrad = (getFieldValue(VEC3F(x - eps, y, z)) - getFieldValue(VEC3F(x + eps, y, z))) / (2*eps);
+        Real yGrad = (getFieldValue(VEC3F(x, y - eps, z)) - getFieldValue(VEC3F(x, y + eps, z))) / (2*eps);
+        Real zGrad = (getFieldValue(VEC3F(x, y, z - eps)) - getFieldValue(VEC3F(x, y, z + eps))) / (2*eps);
+
+        return VEC3F(xGrad, yGrad, zGrad);
+    }
 };
 
+class VectorField3D {
+private:
+    VEC3F (*vecFieldFunction)(VEC3F pos);
+
+    class VecFieldSubField: public FieldFunction3D {
+    private:
+        VectorField3D* vecField;
+        unsigned index;
+    public:
+        VecFieldSubField(VectorField3D* vecField, unsigned index): vecField(vecField), index(index) {}
+        virtual Real getFieldValue(const VEC3F& pos) const { return vecField->getFieldValue(pos)[index]; }
+    };
+
+    class VecFieldMagField: public FieldFunction3D {
+    private:
+        VectorField3D* vecField;
+    public:
+        VecFieldMagField(VectorField3D* vecField): vecField(vecField) {}
+        virtual Real getFieldValue(const VEC3F& pos) const { return vecField->getFieldValue(pos).norm(); }
+    };
+
+
+public:
+    VectorField3D(VEC3F (*vecFieldFunction)(VEC3F pos)):vecFieldFunction(vecFieldFunction) {
+        this->x = new VecFieldSubField(this, 0);
+        this->y = new VecFieldSubField(this, 1);
+        this->z = new VecFieldSubField(this, 2);
+
+        this->mag = new VecFieldMagField(this);
+    }
+
+    VectorField3D():vecFieldFunction(nullptr) {
+        this->x = new VecFieldSubField(this, 0);
+        this->y = new VecFieldSubField(this, 1);
+        this->z = new VecFieldSubField(this, 2);
+
+        this->mag = new VecFieldMagField(this);
+    } // Only to be used by subclasses
+
+    virtual ~VectorField3D(){
+        // delete x;
+        // delete y;
+        // delete z;
+        // delete mag;
+    }
+
+    virtual VEC3F getFieldValue(const VEC3F& pos) const {
+        return vecFieldFunction(pos);
+    }
+
+    virtual VEC3F operator()(const VEC3F& pos) const {
+        return getFieldValue(pos);
+    }
+
+    FieldFunction3D *x, *y, *z, *mag;
+
+};
+
+class NormalizedVF3D: public VectorField3D {
+private:
+    VectorField3D* field;
+public:
+    NormalizedVF3D(VectorField3D* field): field(field) {}
+
+    virtual VEC3F getFieldValue(const VEC3F& pos) const {
+        return this->field->getFieldValue(pos).normalized();
+    }
+};
+
+class GradientField3D: public VectorField3D {
+private:
+    FieldFunction3D* field;
+    Real eps;
+public:
+    GradientField3D(FieldFunction3D* field, Real eps): field(field), eps(eps) {}
+
+    virtual VEC3F getFieldValue(const VEC3F& pos) const {
+        return this->field->getNumericalGradient(pos, this->eps);
+    }
+};
 
 class ConstantFunction3D: public FieldFunction3D {
 public:
@@ -206,11 +298,17 @@ public:
         return gridToFieldCoords(posF) + cellCornerToCenter;
     }
 
-    virtual void writeCSV(string filename) {
+    virtual void writeCSV(string filename, bool verbose = false) {
         ofstream out;
         out.open(filename);
         if (out.is_open() == false)
             return;
+
+        PB_DECL();
+
+        if (verbose) {
+            PB_STARTD("Writing %d x %d x % d field (%d values) to %s", xRes, yRes, zRes, (xRes * yRes * zRes), filename.c_str());
+        }
 
         for (uint i = 0; i < xRes; ++i) {
             for (uint j = 0; j < yRes; ++j) {
@@ -218,9 +316,13 @@ public:
                     out << i << ", " << j << ", " << k << ", " << get(i, j, k) << endl;
                 }
             }
+            if (verbose) {
+                PB_PROGRESS(((Real) i) / xRes);
+            }
+
         }
 
-        printf("Wrote %d x %d x % d field (%d values) to %s\n", xRes, yRes, zRes, (xRes * yRes * zRes), filename.c_str());
+        PB_END();
 
         out.close();
 
@@ -419,6 +521,8 @@ public:
 
         VEC3F gridResF(xRes, yRes, zRes);
 
+        PB_START("Sampling %dx%dx%d scalar field into ArrayGrid3D", xRes, yRes, zRes);
+
         for (uint i = 0; i < xRes; i++) {
             for (uint j = 0; j < yRes; j++) {
                 for (uint k = 0; k < zRes; k++) {
@@ -427,10 +531,16 @@ public:
 
                     VEC3F samplePoint = functionMin + (gridPointF.cwiseQuotient(gridResF - VEC3F(1,1,1)).cwiseProduct(fieldDelta));
 
-                    this->at(i, j, k) = fieldFunction->getFieldValue(samplePoint);
+                    Real val = fieldFunction->getFieldValue(samplePoint);
+
+                    this->at(i, j, k) = val;
                 }
             }
+            PB_PROGRESS((Real) i / xRes);
         }
+        PB_END();
+
+        this->setMapBox(AABB(functionMin, functionMax));
 
     }
 
@@ -696,6 +806,214 @@ public:
 
 
 };
+
+
+class VectorGrid3D: public VectorField3D {
+public:
+    uint xRes, yRes, zRes;
+    bool supportsNonIntegerIndices = false;
+
+    // Bounds (aka center + lengths) for mapping into this grid
+    // as a field function
+    AABB mapBox;
+    bool hasMapBox = false;
+
+    virtual uint totalCells() const {
+        return xRes * yRes * zRes;
+    }
+
+    virtual VEC3F get(uint x, uint y, uint z) const = 0;
+
+    virtual VEC3F getf(Real x, Real y, Real z) const {
+        (void) x; (void) y; (void) z; // Suppress unused argument warning
+        printf("This grid doesn't support non-integer indices!\n");
+        exit(1);
+    }
+
+    virtual VEC3F get(VEC3I pos) const {
+        return get(pos[0], pos[1], pos[2]);
+    }
+
+    virtual VEC3F getf(VEC3F pos) const {
+        return getf(pos[0], pos[1], pos[2]);
+    }
+
+    virtual void setMapBox(AABB box) {
+        mapBox = box;
+        hasMapBox = true;
+    }
+
+    virtual VEC3F getFieldValue(const VEC3F& pos) const override {
+        if (!hasMapBox) {
+            printf("Attempting getFieldValue on a VectorGrid3D without a mapBox!\n");
+            exit(1);
+        }
+
+        VEC3F samplePoint = (pos - mapBox.min()).cwiseQuotient(mapBox.span());
+        samplePoint = samplePoint.cwiseMax(VEC3F(0,0,0)).cwiseMin(VEC3F(1,1,1));
+
+        const VEC3F indices = samplePoint.cwiseProduct(VEC3F(xRes-1, yRes-1, zRes-1));
+
+        if (supportsNonIntegerIndices) {
+            return getf(indices);
+        } else {
+            return get(indices.cast<int>());
+        }
+    }
+
+    virtual VEC3F gridToFieldCoords(const VEC3F& pos) const {
+        if (!hasMapBox) {
+            printf("Attempting cellToFieldCoords on a Grid3D without a mapBox!\n");
+            exit(1);
+        }
+
+        return mapBox.min() + pos.cwiseQuotient(VEC3F(xRes, yRes, zRes)).cwiseProduct(mapBox.span());
+    }
+
+    virtual VEC3F getCellCenter(const VEC3I& pos) const {
+        if (!hasMapBox) {
+            printf("Attempting getCellCenter on a Grid3D without a mapBox!\n");
+            exit(1);
+        }
+
+        VEC3F cellCornerToCenter = mapBox.span().cwiseQuotient(VEC3F(xRes, yRes, zRes))/2.0;
+        VEC3F posF(pos.x(), pos.y(), pos.z());
+
+        return gridToFieldCoords(posF) + cellCornerToCenter;
+    }
+
+    // Writes to F3D file using the field bounds if the field has them, otherwise using
+    // the resolution of the grid.
+    virtual void writeF3Ds(string filename, bool verbose = false) const {
+        if (hasMapBox) {
+            writeF3Ds(filename, mapBox, verbose);
+        } else {
+            writeF3Ds(filename, AABB(VEC3F(0,0,0), VEC3F(xRes, yRes, zRes)), verbose);
+        }
+    }
+
+    virtual void writeF3Ds(string filename, AABB bounds, bool verbose = false) const {
+        VirtualGrid3D(xRes, yRes, zRes, bounds.min(), bounds.max(), this->x).writeF3D(filename + string(".x.f3d"), bounds, verbose);
+        VirtualGrid3D(xRes, yRes, zRes, bounds.min(), bounds.max(), this->y).writeF3D(filename + string(".y.f3d"), bounds, verbose);
+        VirtualGrid3D(xRes, yRes, zRes, bounds.min(), bounds.max(), this->z).writeF3D(filename + string(".z.f3d"), bounds, verbose);
+    }
+
+    virtual void writeCSV(string filename) {
+        ofstream out;
+        out.open(filename);
+        if (out.is_open() == false)
+            return;
+
+        PB_START("Writing %d x %d x % d field (%d values) to %s", xRes, yRes, zRes, (xRes * yRes * zRes), filename.c_str());
+
+        for (uint i = 0; i < xRes; ++i) {
+            for (uint j = 0; j < yRes; ++j) {
+                for (uint k = 0; k < zRes; ++k) {
+                    VEC3F g = get(i, j, k);
+                    out << i << ", " << j << ", " << k << ", " << g[0] << ", " << g[1] << ", " << g[2] << endl;
+                }
+            }
+            PB_PROGRESS( ((Real) i) / xRes );
+        }
+
+        PB_END();
+
+        out.close();
+
+    }
+};
+
+class ArrayVectorGrid3D: public VectorGrid3D {
+private:
+    VEC3F* values;
+public:
+
+    // Create empty (not zeroed) field with given resolution
+    ArrayVectorGrid3D(uint xRes, uint yRes, uint zRes) {
+        this->xRes = xRes;
+        this->yRes = yRes;
+        this->zRes = zRes;
+        values = new VEC3F[xRes * yRes * zRes];
+    }
+
+    // Create empty (not zeroed) field with given resolution
+    ArrayVectorGrid3D(VEC3I resolution): ArrayVectorGrid3D(resolution[0], resolution[1], resolution[2]) {}
+
+    // TODO Read ArrayGrid3D from F3Ds
+
+    // Destructor
+    ~ArrayVectorGrid3D() {
+        delete values;
+    }
+
+    // Access value based on integer indices
+    VEC3F get(uint x, uint y, uint z) const override {
+        return values[(z * yRes + y) * xRes + x];
+    }
+
+    // Access value directly (allows setting)
+    VEC3F& at(uint x, uint y, uint z) {
+        return values[(z * yRes + y) * xRes + x];
+    }
+
+    VEC3F& atFieldPos(VEC3F pos) {
+        if (!hasMapBox) {
+            printf("Attempting atFieldPos on an ArrayGrid without a mapBox!\n");
+            exit(1);
+        }
+
+        VEC3F samplePoint = (pos - mapBox.min()).cwiseQuotient(mapBox.span());
+        samplePoint = samplePoint.cwiseMax(VEC3F(0,0,0)).cwiseMin(VEC3F(1,1,1));
+
+        const VEC3F indices = samplePoint.cwiseProduct(VEC3F(xRes-1, yRes-1, zRes-1));
+
+        return at(indices[0], indices[1], indices[2]);
+    }
+
+    VEC3F& atFieldPos(Real x, Real y, Real z) {
+        return atFieldPos(VEC3F(x,y,z));
+    }
+
+
+    VEC3F& operator()(VEC3F pos) {
+        return atFieldPos(pos);
+    }
+
+    // Access value directly in C-style array (allows setting)
+    VEC3F& operator[](size_t x) {
+        return values[x];
+    }
+
+
+    // Create field from scalar function by sampling it on a regular grid
+    ArrayVectorGrid3D(uint xRes, uint yRes, uint zRes, VEC3F functionMin, VEC3F functionMax, VectorField3D *fieldFunction):ArrayVectorGrid3D(xRes, yRes, zRes){
+
+        VEC3F gridResF(xRes, yRes, zRes);
+
+        PB_START("Sampling %dx%dx%d vector field into ArrayVectorGrid3D...", xRes, yRes, zRes);
+
+        for (uint i = 0; i < xRes; i++) {
+            for (uint j = 0; j < yRes; j++) {
+                for (uint k = 0; k < zRes; k++) {
+                    VEC3F gridPointF(i, j, k);
+                    VEC3F fieldDelta = functionMax - functionMin;
+
+                    VEC3F samplePoint = functionMin + (gridPointF.cwiseQuotient(gridResF - VEC3F(1,1,1)).cwiseProduct(fieldDelta));
+
+                    this->at(i, j, k) = fieldFunction->getFieldValue(samplePoint);
+                }
+            }
+            PB_PROGRESS( ((Real) i)/xRes );
+        }
+        PB_END();
+
+        this->setMapBox(AABB(functionMin, functionMax));
+
+    }
+
+
+};
+
 
 
 

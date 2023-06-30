@@ -221,11 +221,6 @@ namespace MC
         outputMesh.normals.reserve(defaultNormalArraySize);
         outputMesh.indices.reserve(defaultTriangleArraySize);
 
-        // if (verbose) {
-        //     printf("Marching cubes on a %d x %d x %d grid: 0.00%%", nx, ny, nz);
-        //     fflush(stdout);
-        // }
-
         PB_START("Marching cubes with res %dx%dx%d", nx, ny, nz);
         PB_PROGRESS(0);
 

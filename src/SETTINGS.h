@@ -13,6 +13,7 @@ typedef double Real;
 typedef unsigned int uint;
 typedef Matrix<Real, 2, 1 > VEC2F;
 typedef Matrix<Real, 3, 1 > VEC3F;
+typedef Matrix<Real, 4, 1 > VEC4F;
 typedef Matrix<int, 3, 1 > VEC3I;
 typedef Matrix<int, 1, 1 > VEC2I;
 typedef VectorXd VECTOR;

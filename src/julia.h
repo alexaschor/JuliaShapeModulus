@@ -42,7 +42,7 @@ public:
                             value.x()       << "," <<
                             value.y()       << "," <<
                             value.z()       << "," <<
-                        endl;
+                            endl;
 
 
                     }
@@ -103,13 +103,14 @@ public:
         int totalIterations = 0;
 
         while (magnitude < escape && totalIterations < maxIterations) {
-            iterate = p->getFieldValue(iterate);
+            QUATERNION newIterate = p->getFieldValue(iterate);
+            iterate = newIterate;
             magnitude = iterate.magnitude();
-
             totalIterations++;
         }
 
-        return log(magnitude);
+        Real out = log(magnitude);
+        return out;
     }
 
 };
@@ -130,28 +131,22 @@ public:
     Real constantA;
     Real constantB;
 
-    Real fitScale;
-
 public:
-    DistanceGuidedQuatFn(Grid3D* distanceField,  QuatToQuatFn* p, Real a = 300, Real b = 0, Real fitScale = 1):
-        distanceField(distanceField), p(p), hasConstantA(true), hasConstantB(true), constantA(a), constantB(b), fitScale(fitScale) {}
+    DistanceGuidedQuatFn(Grid3D* distanceField,  QuatToQuatFn* p, Real a = 300, Real b = 0):
+        distanceField(distanceField), p(p), hasConstantA(true), hasConstantB(true), constantA(a), constantB(b) {}
 
-    DistanceGuidedQuatFn(Grid3D* distanceField,  QuatToQuatFn* p, FieldFunction3D* a, FieldFunction3D* b, Real fitScale = 1):
-        distanceField(distanceField), p(p), a(a), b(b), hasConstantA(false), hasConstantB(false), fitScale(fitScale) {}
+    DistanceGuidedQuatFn(Grid3D* distanceField,  QuatToQuatFn* p, FieldFunction3D* a, FieldFunction3D* b):
+        distanceField(distanceField), p(p), a(a), b(b), hasConstantA(false), hasConstantB(false) {}
 
     QUATERNION getFieldValue(QUATERNION q) const override {
-        // First lookup the radius we're going to project to and save the original
 
+        // First lookup the radius we're going to project to and save the original
         QUATERNION original = q;
         VEC3F iterateV3(q[0], q[1], q[2]);
         const Real distance = (*distanceField)(iterateV3);
 
         Real aValue = (hasConstantA ? constantA : a->getFieldValue(iterateV3));
         Real bValue = (hasConstantB ? constantB : b->getFieldValue(iterateV3)) ;
-
-        // PRINTD(aValue);
-        // PRINTD(bValue);
-
 
         Real radius = exp( aValue * (distance - bValue ));
 
@@ -167,12 +162,7 @@ public:
         QUATERNION normedIterate = q;
         normedIterate.normalize();
 
-        // Scale radius (accounting for fitScale)
-        // Fitscale is a scalar parameter to smoothly (ish) interpolate between the original P and
-        // the mapped version, so unless you're doing that it should be always set to 1
-        radius = exp((1 - fitScale) * log(q.magnitude()) + (fitScale * log(radius)));
-
-        bool tooSmall = normedIterate.anyNans();
+        bool tooSmall = (normedIterate.anyNans() || normedIterate.magnitude() == 0);
         if (tooSmall) {
             QUATERNION origNorm = original;
             origNorm.normalize();
