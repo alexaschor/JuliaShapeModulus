@@ -11,18 +11,11 @@ sdfGen:
 main:
 	cd projects/main; make
 
-rootMorph:
-	cd projects/rootMorph; make
-
 genPoly:
 	cd projects/genPoly; make
 
-optimizeComplexity:
-	cd projects/optimizeComplexity; make
-
 clean:
 	@-for d in $(LIBS); do (echo -e "cd ./lib/$$d; rm *.o";cd ./lib/$$d; rm *.o; cd ../..); done
-	cd projects/sdfGen; make clean
 	cd projects/main; make clean
-	cd projects/rootMorph; make clean
 	cd projects/genPoly; make clean
+	cd projects/sdfGen; make clean
