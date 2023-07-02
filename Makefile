@@ -3,7 +3,7 @@ LIBS = Quaternion
 
 include ./projects/include.mk
 
-all: sdfGen main rootMorph genPoly optimizeComplexity
+all: sdfGen main genPoly
 
 sdfGen:
 	cd projects/sdfGen; make
