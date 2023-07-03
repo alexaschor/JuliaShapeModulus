@@ -13,6 +13,25 @@ _Abstract:_ We present an efficient new method for computing Mandelbrot-like fra
 
 ## This Repo
 
-First of all, thanks for coming to this page! If you have any questions at all or problems with the code, please email me at `<my github username>@gmail.com` and I'll do my best to help. 
+First of all, thanks for coming to this page! If you have any questions at all or problems with building, running or modifyinh the code, please email me at `<my github username>@gmail.com` and I'll do my best to help. 
 
-This is the code used to generate the meshes used in most of the paper figures. It should build with `make`, though you might have to edit `projects/include.mk` with your compiler and compiler flags. For an interactive, (mostly) real time 2D version that allows you to play with the parameters, check out https://github.com/alexaschor/JSM2D
+This is the code used to generate the meshes used in most of the paper figures. For an interactive, (mostly) real time 2D version that allows you to play with the parameters, check out https://github.com/alexaschor/JSM2D
+
+## Compilation
+It should build with `make`, though you might have to edit `projects/include.mk` with your compiler and compiler flags. This code has no external dependencies with the exception of one optional one: there's a parallel mesh compute script (symlinked in `bin/`) that runs N separate jobs to compute different parts of the mesh and then uses trimesh2's `mesh_cat` to join them together.
+
+## Usage
+All the compiled executables in `bin/` print out documentation when called with no parameters.
+
+To generate a shaped Julia set from one of the included SDF's:
+```
+ ./bin/run data/fields/chair100.f3d RANDOM <MC res> <alpha> <beta> 0 0 0  <output *.obj> 
+```
+
+
+To generate an SDF from a mesh (uses a very slightly modified version of `christopherbatty/SDFGen`)
+```
+ ./bin/sdfGen <*.obj input> <SDF resolution> <*.f3d output> <padding cells, just a few are probably enough>
+```
+
+To generate a polynomial versor function to use with `./bin/run`, `./bin/sdfGen` will give you a few different options. 
