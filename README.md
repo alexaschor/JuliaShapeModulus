@@ -21,17 +21,79 @@ This is the code used to generate the meshes used in most of the paper figures. 
 It should build with `make`, though you might have to edit `projects/include.mk` with your compiler and compiler flags. This code has no external dependencies with the exception of one optional one: there's a parallel mesh compute script (symlinked in `bin/`) that runs N separate jobs to compute different parts of the mesh and then uses trimesh2's `mesh_cat` to join them together.
 
 ## Usage
-All the compiled executables in `bin/` print out documentation when called with no parameters.
+Compiling the project produces three executables, compiled separately from directories in `projects/`. They each have their own Makefile, but each of them includes `projects/include.mk`, so that's where you can set the compiler to use and any flags you want to specify. 
 
-To generate a shaped Julia set from one of the included SDF's:
+The three executables spit out documentation when called with no arguments, which is reproduced here for convenience.
+
+### 1. `genPoly`, for generating polynomial versor functions
 ```
- ./bin/run data/fields/chair100.f3d RANDOM <MC res> <alpha> <beta> 0 0 0  <output *.obj> 
+❯ ./bin/genPoly
+USAGE:
+-----------------------------------------------
+To inspect a *.p4d polynomial:
+ ./bin/genPoly INS <*.p4d file>
+-----------------------------------------------
+To generate a random polynomial in a bounding box:
+ ./bin/genPoly GEN <numRoots> <min power> <max power> <*.p4d output> BOX <x min> <y min> <z min> <x max> <y max> <z max>
+To generate a random polynomial in an OBJ's bounding box:
+ ./bin/genPoly GEN <numRoots> <min power> <max power> <*.p4d output> OBJBOX <*.obj model>
+To generate a random polynomial near an SDF's surface:
+ ./bin/genPoly GEN <numRoots> <min power> <max power> <*.p4d output> SDF <*.f3d sdf> <max distance>
+-----------------------------------------------
+To generate a polynomial whose roots are the union of two input polynomials:
+ ./bin/genPoly ADD <first *.p4d input> <second *.p4d input> <*.p4d output>
+-----------------------------------------------
+To scale the positions of a polynomial's roots in space:
+ ./bin/genPoly SCALE <*.p4d input> <factor> <*.p4d output>
 ```
 
-
-To generate an SDF from a mesh (uses a very slightly modified version of `christopherbatty/SDFGen`)
+### 2. `sdfGen`, for generating SDFs from a triangle mesh (essentially the same as [christopherbatty/SDFGen](https://github.com/christopherbatty/SDFGen))
 ```
- ./bin/sdfGen <*.obj input> <SDF resolution> <*.f3d output> <padding cells, just a few are probably enough>
+❯ ./bin/sdfGen
+USAGE:
+To generate an SDF from a mesh with automatically generated bounds:
+ ./bin/sdfGen <*.obj input> <resolution> <*.f3d output> <padding cells>
+To get the bounds for a mesh sequence:
+ ./bin/sdfGen BOUNDS <obj 1> <obj 2> ... <obj N>
+To generate an SDF from a mesh with specified bounds:
+ ./bin/sdfGen <*.obj input> <resolution> <*.f3d output> <min X> <min Y> <min Z> <max X> <max Y> <max Z>
 ```
 
-To generate a polynomial versor function to use with `./bin/run`, `./bin/sdfGen` will give you a few different options. 
+### 3. `run`, for computing the shape-modulus Julia set given a polynomial for the versor function and an SDF
+A note on this one: if you're just trying to reproduce the results from the paper, you probably don't need to use any offset for the origin. It's an interesting parameter to play with and causes some cool effects, but unless you want to tweak it just set the offset to `0 0 0`. The octree specifier string is for if you want to compute just a subsection of the overall Julia set, it's useful for zooming in on something or for running in parallel. If you want to run things in parallel, check out `bin/prun`. It's a symlink to a Python script that will automatically run this in parallel, and if you have Trimesh2's `mesh_cat` in your PATH it will also join the resultant meshes back together.
+```
+USAGE:
+To create a shaped julia set from a distance field:
+ ./bin/run <SDF *.f3d> <P(q) *.poly4d, or the word RANDOM> <output resolution> <a> <b> <offset x> <offset y> <offset z> <output *.obj> <optional: octree specifier string>
+
+    This will compute the 3D Julia quaternion Julia set of the function:
+        f(q) = r(q) * d(q)
+    Where:
+        r(q) = e^( a * SDF(q) + b )
+        d(q) = Normalized( P(q) )
+
+    P(q) is the quaternion polynomial function, which determines the character of the fractal detail.
+    a is a parameter which controls the thickness of the shell in which the chaotic effect has significant influence
+    on set membership, and b is a parameter which controls the position along the surface of the SDF of that shell.
+
+    The offset X, Y, and Z parameters move the origin of the dynamical system around in space, which causes
+    the Julia set to dissolve in interesting ways.
+    The octree specifier string is an optional parameter useful for computing large Julia sets in parallel.
+    You can select a box in an evenly-subdivided octree of arbitrary depth specified by a string of digits 0-7,
+    laid out as follows:
+                 +---+
+               / |4|5|
+              /  +-+-+
+             /   |7|6|
+            /    +---+
+           +---+    /
+           |0|1|   /
+           +-+-+  /
+           |3|2| /
+        ▲  +---+
+        |
+        Y X--▶
+        Z ●
+        (into page)
+    Each character of the string will go one level deeper, so the string '5555' specifies the 1/16-edge length box at the far back corner.
+```
