@@ -13,4 +13,6 @@ _Abstract:_ We present an efficient new method for computing Mandelbrot-like fra
 
 ## This Repo
 
-First of all, thanks for coming to this page! If you have any questions at all, please email me at `<my github username>@gmail.com` and I'll do my best to help. 
+First of all, thanks for coming to this page! If you have any questions at all or problems with the code, please email me at `<my github username>@gmail.com` and I'll do my best to help. 
+
+This is the code used to generate the meshes used in most of the paper figures. It should build with `make`, though you might have to edit `projects/include.mk` with your compiler and compiler flags. For an interactive, (mostly) real time 2D version that allows you to play with the parameters, check out https://github.com/alexaschor/JSM2D
