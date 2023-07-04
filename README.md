@@ -98,3 +98,6 @@ To create a shaped julia set from a distance field:
         (into page)
     Each character of the string will go one level deeper, so the string '5555' specifies the 1/16-edge length box at the far back corner.
 ```
+## Usage as a Library
+
+Aside from the main building executables, this repository can also be used as a library for representing vector and scalar functions on R3 and computing Julia sets in general. The main strength of the library is the ability to represent scalar and vector fields in the same way whether they are defined by some implicit function and evaluated on-the-fly or they are stored in-memory. Caching, interpolation, gradient calculation, file I/O, and meshing via Marching Cubes with root-finding are all supported. The scalar and vector field code are in `src/field.h`, and should be pretty much self-contained. The Julia set-specific ones are in `src/julia.h`, and are self-contained except for the QUATERNION and POLYNOMIAL-4D classes in `lib/Quaternion`. 
