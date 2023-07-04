@@ -13,7 +13,7 @@ _Abstract:_ We present an efficient new method for computing Mandelbrot-like fra
 
 ## This Repo
 
-First of all, thanks for coming to this page! If you have any questions at all or problems with building, running or modifying the code, please email me at <img height="20px" alt="an image of an email address. the emaill address is the same as my github username, followed by at gmail.com" src="https://github.com/alexaschor/JuliaShapeModulus/assets/77604978/1225837c-eda3-4873-b92b-3cebe3f42d2e">
+First of all, thanks for coming to this page! If you have any questions or ideas about the paper or code or any problems with building, running or modifying the code, please email me at <img height="20px" alt="an image of an email address. the emaill address is the same as my github username, followed by at gmail.com" src="https://github.com/alexaschor/JuliaShapeModulus/assets/77604978/1225837c-eda3-4873-b92b-3cebe3f42d2e">
  and I'll do my best to help. 
 
 This is the code used to generate the meshes used in most of the paper figures. For an interactive, (mostly) real time 2D version that allows you to play with the parameters, check out https://github.com/alexaschor/JSM2D
