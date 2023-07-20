@@ -18,6 +18,8 @@ First of all, thanks for coming to this page! If you have any questions or ideas
 
 This is the code used to generate the meshes used in most of the paper figures. For an interactive, (mostly) real time 2D version that allows you to play with the parameters, check out https://github.com/alexaschor/JSM2D
 
+If you want to run Kim 2015's method, the [original code release](http://www.tkim.graphics/JULIA/source.html) is now difficult to build because it relies on the old C++ version of BEM++ (now called bempp), which is now maintained in python. I have a [modified version](https://github.com/alexaschor/QUIJIBO) hosted on this GitHub account that should be identical, just ported over to the new version and with a compiler error fixed.
+
 ## Compilation
 It should build with `make`, though you might have to edit `projects/include.mk` with your compiler and compiler flags. This code has no external dependencies with the exception of one optional one: there's a parallel mesh compute script (symlinked in `bin/`) that runs N separate jobs to compute different parts of the mesh and then uses trimesh2's `mesh_cat` to join them together.
 
