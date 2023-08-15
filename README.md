@@ -8,6 +8,8 @@ This is the code for the paper titled _A Shape Modulus for Fractal Geometry Gene
 
 Download the paper: [PDF (192MiB)](http://tkim.graphics/VERSOR/SchorKim_2023.pdf), [PDF compressed (4MiB)](http://tkim.graphics/VERSOR/SchorKim_2023_smaller.pdf)
 
+See the paper's accompanying video here: [YouTube link](https://www.youtube.com/watch?v=wy__W5IElYY)
+
 
 _Abstract:_ We present an efficient new method for computing Mandelbrot-like fractals (Julia sets) that approximate a user-defined shape. Our algorithm is orders of magnitude faster than previous methods, as it entirely sidesteps the need for a time-consuming numerical optimization. It is also more robust, succeeding on shapes where previous approaches failed. The key to our approach is a versor-modulus analysis of fractals that allows us to formulate a novel shape modulus function that directly controls the broad shape of a Julia set, while keeping fine-grained fractal details intact. Our formulation contains flexible artistic controls that allow users to seamlessly add fractal detail to desired spatial regions, while transitioning back to the original shape in others. No previous approach allows Mandelbrot-like details to be "painted" onto meshes.
 
