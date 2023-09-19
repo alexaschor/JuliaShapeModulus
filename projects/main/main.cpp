@@ -8,6 +8,9 @@
 #include <cmath>
 #include <random>
 
+#include <sys/stat.h>
+#include <errno.h>
+
 #include "SETTINGS.h"
 
 #include "MC.h"
@@ -250,6 +253,11 @@ int main(int argc, char *argv[]) {
         PRINT("Loading polynomial from file...");
         POLYNOMIAL_4D polynomial(argv[2]);
         p = new RationalQuatPoly(polynomial);
+    }
+
+    // Make temp dir if it doesn't exist
+    if ( mkdir("temp", ACCESSPERMS) != 0 && errno != EEXIST) {
+	PRINT("Error: couldn't create directory ./temp to store polynomials");
     }
 
     // Save polynomial info for inspection later (helpful if it was randomly generated)
