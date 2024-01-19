@@ -1,12 +1,14 @@
 #ifndef JULIA_H
 #define JULIA_H
 
+#include "SETTINGS.h"
 #include "mesh.h"
 #include "field.h"
 #include "Quaternion/QUATERNION.h"
 #include "Quaternion/POLYNOMIAL_4D.h"
+#include "PerlinNoise/PerlinNoise.h"
 
-class QuatToQuatFn {
+class QuatMap {
 public:
     virtual QUATERNION getFieldValue(QUATERNION q) const = 0;
 
@@ -57,7 +59,9 @@ public:
     }
 };
 
-class SimpleJuliaQuat: public QuatToQuatFn {
+
+
+class SimpleJuliaQuat: public QuatMap {
 public:
     QUATERNION c;
     SimpleJuliaQuat(QUATERNION c): c(c) {}
@@ -67,7 +71,7 @@ public:
     }
 };
 
-class RationalQuatPoly: public QuatToQuatFn {
+class RationalQuatPoly: public QuatMap {
 public:
     POLYNOMIAL_4D topPolynomial;
     bool hasBottomPolynomial;
@@ -89,12 +93,12 @@ public:
 
 class QuaternionJuliaSet: public FieldFunction3D {
 public:
-    QuatToQuatFn* p;
+    QuatMap* p;
     int maxIterations;
     Real escape;
 
 public:
-    QuaternionJuliaSet(QuatToQuatFn* p, int maxIterations = 3, Real escape = 20):
+    QuaternionJuliaSet(QuatMap* p, int maxIterations = 3, Real escape = 20):
         p(p), maxIterations(maxIterations), escape(escape) {}
 
     Real getFieldValue(const VEC3F& pos) const override {
@@ -115,10 +119,10 @@ public:
 
 };
 
-class DistanceGuidedQuatFn: public QuatToQuatFn {
+class DistanceGuidedQuatFn: public QuatMap {
 public:
     Grid3D* distanceField;
-    QuatToQuatFn* p;
+    QuatMap* p;
 
     FieldFunction3D* a;
     FieldFunction3D* b;
@@ -132,10 +136,10 @@ public:
     Real constantB;
 
 public:
-    DistanceGuidedQuatFn(Grid3D* distanceField,  QuatToQuatFn* p, Real a = 300, Real b = 0):
+    DistanceGuidedQuatFn(Grid3D* distanceField,  QuatMap* p, Real a = 300, Real b = 0):
         distanceField(distanceField), p(p), hasConstantA(true), hasConstantB(true), constantA(a), constantB(b) {}
 
-    DistanceGuidedQuatFn(Grid3D* distanceField,  QuatToQuatFn* p, FieldFunction3D* a, FieldFunction3D* b):
+    DistanceGuidedQuatFn(Grid3D* distanceField,  QuatMap* p, FieldFunction3D* a, FieldFunction3D* b):
         distanceField(distanceField), p(p), a(a), b(b), hasConstantA(false), hasConstantB(false) {}
 
     QUATERNION getFieldValue(QUATERNION q) const override {
@@ -187,13 +191,201 @@ public:
 
 };
 
+class R3Map {
+public:
+    virtual VEC3F getFieldValue(const VEC3F& q) const = 0;
+
+    virtual VEC3F operator()(const VEC3F& q) const {
+        return getFieldValue(q);
+    }
+
+    virtual void writeCSVPairs(string filename, uint xRes, uint yRes, uint zRes, VEC3F fieldMin, VEC3F fieldMax) {
+        ofstream out;
+        out.open(filename);
+        if (out.is_open() == false)
+            return;
+
+        for (uint j = 0; j < xRes; ++j) {
+            for (uint k = 0; k < yRes; ++k) {
+                for (uint l = 0; l < zRes; ++l) {
+                    VEC3F sampleOffset = fieldMax - fieldMin;
+                    sampleOffset.x() *= ((float) j / xRes);
+                    sampleOffset.y() *= ((float) k / yRes);
+                    sampleOffset.z() *= ((float) l / zRes);
+
+                    VEC3F samplePoint = fieldMin + sampleOffset;
+                    VEC3F value = getFieldValue(samplePoint);
+
+                    out <<
+                        samplePoint.x() << "," <<
+                        samplePoint.y() << "," <<
+                        samplePoint.z() << "," <<
+                        value.x()       << "," <<
+                        value.y()       << "," <<
+                        value.z()       << "," <<
+                        endl;
+
+
+                }
+            }
+        }
+
+        printf("Wrote %d x %d x %d field (%d values) to %s\n", xRes, yRes, zRes, (xRes * yRes * zRes), filename.c_str());
+
+        out.close();
+
+    }
+};
+
+class R3JuliaSet: public FieldFunction3D {
+public:
+    R3Map* m;
+    int maxIterations;
+    Real escape;
+
+public:
+    R3JuliaSet(R3Map* m, int maxIterations = 3, Real escape = 20):
+        m(m), maxIterations(maxIterations), escape(escape) {}
+
+    Real getFieldValue(const VEC3F& pos) const override {
+        VEC3F iterate(pos);
+        Real magnitude = iterate.norm();
+        int totalIterations = 0;
+
+        while (magnitude < escape && totalIterations < maxIterations) {
+            VEC3F newIterate = m->getFieldValue(iterate);
+            iterate = newIterate;
+            magnitude = iterate.norm();
+            totalIterations++;
+        }
+
+        Real out = log(magnitude);
+        return out;
+    }
+
+};
+
+class VersorModulusR3Map: public R3Map {
+public:
+    R3Map* versor;
+    FieldFunction3D* modulus;
+
+    VersorModulusR3Map(R3Map* versor, FieldFunction3D* modulus): versor(versor), modulus(modulus) {};
+
+    VEC3F getFieldValue(const VEC3F& pos) const override {
+        return (*versor)(pos) * (*modulus)(pos);
+    }
+};
+
+
+class ShapeModulus: public FieldFunction3D {
+public:
+    Grid3D* distanceField;
+
+    FieldFunction3D* a;
+    FieldFunction3D* b;
+
+    // When a or b are constant fields, we could use a
+    // ConstantFunction3D, but to save the overhead of
+    // a lookup we have a special mode for constant values
+    bool hasConstantA;
+    bool hasConstantB;
+    Real constantA;
+    Real constantB;
+
+public:
+    ShapeModulus(Grid3D* distanceField, Real a = 300, Real b = 0):
+        distanceField(distanceField), hasConstantA(true), hasConstantB(true), constantA(a), constantB(b) {}
+
+    ShapeModulus(Grid3D* distanceField, FieldFunction3D* a, FieldFunction3D* b):
+        distanceField(distanceField), a(a), b(b), hasConstantA(false), hasConstantB(false) {}
+
+    Real getFieldValue(const VEC3F& pos) const override {
+        Real distance = (*distanceField)(pos);
+        Real aValue   = (hasConstantA ? constantA : a->getFieldValue(pos));
+        Real bValue   = (hasConstantB ? constantB : b->getFieldValue(pos)) ;
+        Real radius   = exp( aValue * (distance - bValue ));
+
+        return radius;
+    }
+
+};
+
+class NoiseVersor: public R3Map {
+public:
+    siv::PerlinNoise nx{ 1234567u };
+    siv::PerlinNoise ny{ 6543210u };
+    siv::PerlinNoise nz{ 1232101u };
+
+    uint octaves;
+    Real scale;
+
+    NoiseVersor(uint octaves, Real scale): octaves(octaves), scale(scale) {}
+
+    virtual VEC3F getFieldValue(const VEC3F& pos) const override {
+        VEC3F p = pos * scale;
+
+        VEC3F v(
+            nx.octave3D_01(p.x(), p.y(), p.z(), octaves) * 2 - 1,
+            ny.octave3D_01(p.x(), p.y(), p.z(), octaves) * 2 - 1,
+            nz.octave3D_01(p.x(), p.y(), p.z(), octaves) * 2 - 1
+            );
+
+        return v.normalized();
+    }
+};
+
+class PortalMap: public R3Map {
+public:
+    R3Map *map;
+
+    vector<VEC3F>           portalCenters;
+    vector<AngleAxis<Real>> portalRotations;
+
+    Real  portalRadius;
+    Real  portalScale;
+    FieldFunction3D *mask;
+
+    PortalMap(R3Map *map, vector<VEC3F> portalCenters, vector<AngleAxis<Real>> portalRotations, Real portalRadius, Real portalScale, FieldFunction3D *mask = 0): map(map), portalCenters(portalCenters), portalRotations(portalRotations), portalRadius(portalRadius), portalScale(portalScale), mask(mask) {}
+
+    virtual VEC3F getFieldValue(const VEC3F& pos) const override {
+
+        VEC3F closestPortal = portalCenters[0];
+        AngleAxis<Real> portalRot = portalRotations[0];
+
+        int i = 0;
+        for (auto p : portalCenters) {
+            if ((pos - closestPortal).norm() > (pos - p).norm()) {
+                closestPortal = p;
+                portalRot = portalRotations[i];
+            }
+            i++;
+        }
+
+        Real  dist = (pos - closestPortal).norm();
+        VEC3F ang  = (pos - closestPortal).normalized();
+
+        if (dist < portalRadius) {
+            if (mask && (*mask)(pos) <= 0) {
+                return (*map)(pos);
+            }
+            VEC3F out = (dist * ang * portalScale);
+            out = portalRot * out;
+            return out;
+        } else {
+            return (*map)(pos);
+        }
+
+    }
+};
+
 // =============== INSPECTION FIELDS =======================
 
 class QuatQuatRotField: public FieldFunction3D {
 public:
-    QuatToQuatFn *func;
+    QuatMap *func;
     int i;
-    QuatQuatRotField(QuatToQuatFn* func, int i): func(func), i(i) {}
+    QuatQuatRotField(QuatMap* func, int i): func(func), i(i) {}
 
     virtual Real getFieldValue(const VEC3F& pos) const override {
         QUATERNION input(pos[0], pos[1], pos[2], 0);
@@ -210,8 +402,8 @@ public:
 
 class QuatQuatMagField: public FieldFunction3D {
 public:
-    QuatToQuatFn *func;
-    QuatQuatMagField(QuatToQuatFn* func): func(func) {}
+    QuatMap *func;
+    QuatQuatMagField(QuatMap* func): func(func) {}
 
     virtual Real getFieldValue(const VEC3F& pos) const override {
         QUATERNION input(pos[0], pos[1], pos[2], 0);

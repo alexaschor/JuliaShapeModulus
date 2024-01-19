@@ -26,160 +26,24 @@
 
 using namespace std;
 
-POLYNOMIAL_4D randPolynomialInBox(AABB box, Real minPower, Real maxPower, uint nRoots, bool allowNonIntegerPowers = true) {
-    random_device rd;
-    default_random_engine eng(rd());
-
-    uniform_real_distribution<> spaceXD(box.min()[0], box.max()[0]);
-    uniform_real_distribution<> spaceYD(box.min()[1], box.max()[1]);
-    uniform_real_distribution<> spaceZD(box.min()[2], box.max()[2]);
-
-    uniform_real_distribution<> powerD(minPower, maxPower);
-
-    vector<QUATERNION> roots{};
-    vector<Real> powers{};
-    for (uint i = 0; i < nRoots; ++i) {
-        QUATERNION rootPos = QUATERNION(spaceXD(eng), spaceYD(eng), spaceZD(eng), 0);
-        roots.push_back(rootPos);
-        powers.push_back( allowNonIntegerPowers? powerD(eng) : int(powerD(eng)) );
-    }
-
-    POLYNOMIAL_4D poly(roots, powers);
-    return poly;
-}
-
-POLYNOMIAL_4D randPolynomialInObject(Grid3D* sdf, Real minPower, Real maxPower, uint nRoots, bool allowNonIntegerPowers = true) {
-    random_device rd;
-    default_random_engine eng(rd());
-
-    Real minX = 0, maxX = 1, minY = 0, maxY = 1, minZ = 0, maxZ = 1;
-    if (sdf->hasMapBox) {
-        minX = sdf->mapBox.min()[0];
-        minY = sdf->mapBox.min()[1];
-        minZ = sdf->mapBox.min()[2];
-
-        maxX = sdf->mapBox.max()[0];
-        maxY = sdf->mapBox.max()[1];
-        maxZ = sdf->mapBox.max()[2];
-    }
-
-    uniform_real_distribution<> spaceXD(minX, maxX);
-    uniform_real_distribution<> spaceYD(minY, maxY);
-    uniform_real_distribution<> spaceZD(minZ, maxZ);
-
-    uniform_real_distribution<> powerD(minPower, maxPower);
-
-    vector<QUATERNION> roots{};
-    vector<Real> powers{};
-    for (uint i = 0; i < nRoots; ++i) {
-        QUATERNION rootPos;
-        bool insideTarget = false;
-        while (not insideTarget) {
-            rootPos = QUATERNION(spaceXD(eng), spaceYD(eng), spaceZD(eng), 0);
-            insideTarget = (*sdf).getFieldValue(VEC3F(rootPos[0], rootPos[1], rootPos[2])) < 0;
-        }
-        roots.push_back(rootPos);
-        powers.push_back( allowNonIntegerPowers? powerD(eng) : int(powerD(eng)) );
-    }
-
-    POLYNOMIAL_4D poly(roots, powers);
-    return poly;
-}
-
-POLYNOMIAL_4D randPolynomialNearSurface(Grid3D* sdf, Real minPower, Real maxPower, uint nRoots, Real maxDist, bool allowNonIntegerPowers = true) {
-    random_device rd;
-    default_random_engine eng(rd());
-
-    Real minX = 0, maxX = 1, minY = 0, maxY = 1, minZ = 0, maxZ = 1;
-    if (sdf->hasMapBox) {
-        minX = sdf->mapBox.min()[0];
-        minY = sdf->mapBox.min()[1];
-        minZ = sdf->mapBox.min()[2];
-
-        maxX = sdf->mapBox.max()[0];
-        maxY = sdf->mapBox.max()[1];
-        maxZ = sdf->mapBox.max()[2];
-    }
-
-    uniform_real_distribution<> spaceXD(minX, maxX);
-    uniform_real_distribution<> spaceYD(minY, maxY);
-    uniform_real_distribution<> spaceZD(minZ, maxZ);
-
-    uniform_real_distribution<> powerD(minPower, maxPower);
-
-    vector<QUATERNION> roots{};
-    vector<Real> powers{};
-    for (uint i = 0; i < nRoots; ++i) {
-        QUATERNION rootPos;
-        bool insideTarget = false;
-        while (not insideTarget) {
-            rootPos = QUATERNION(spaceXD(eng), spaceYD(eng), spaceZD(eng), 0);
-            insideTarget = abs((*sdf).getFieldValue(VEC3F(rootPos[0], rootPos[1], rootPos[2]))) < maxDist;
-        }
-        roots.push_back(rootPos);
-        powers.push_back( allowNonIntegerPowers? powerD(eng) : int(powerD(eng)) );
-    }
-
-    POLYNOMIAL_4D poly(roots, powers);
-    return poly;
-}
-
-POLYNOMIAL_4D randPolynomialNearSurfaceBlueNoise(Grid3D* sdf, Real minPower, Real maxPower, uint nRoots, Real maxDist, bool allowNonIntegerPowers = true) {
-    random_device rd;
-    default_random_engine eng(rd());
-
-    Real minX = 0, maxX = 1, minY = 0, maxY = 1, minZ = 0, maxZ = 1;
-    if (sdf->hasMapBox) {
-        minX = sdf->mapBox.min()[0];
-        minY = sdf->mapBox.min()[1];
-        minZ = sdf->mapBox.min()[2];
-
-        maxX = sdf->mapBox.max()[0];
-        maxY = sdf->mapBox.max()[1];
-        maxZ = sdf->mapBox.max()[2];
-    }
-
-    uniform_real_distribution<> spaceXD(minX, maxX);
-    uniform_real_distribution<> spaceYD(minY, maxY);
-    uniform_real_distribution<> spaceZD(minZ, maxZ);
-
-    uniform_real_distribution<> powerD(minPower, maxPower);
-
-    vector<QUATERNION> roots{};
-    vector<Real> powers{};
-    for (uint i = 0; i < nRoots; ++i) {
-        QUATERNION rootPos;
-        bool insideTarget = false;
-        while (not insideTarget) {
-            rootPos = QUATERNION(spaceXD(eng), spaceYD(eng), spaceZD(eng), 0);
-            insideTarget = abs((*sdf).getFieldValue(VEC3F(rootPos[0], rootPos[1], rootPos[2]))) < maxDist;
-        }
-        roots.push_back(rootPos);
-        powers.push_back( allowNonIntegerPowers? powerD(eng) : int(powerD(eng)) );
-    }
-
-    POLYNOMIAL_4D poly(roots, powers);
-    return poly;
-}
-
-void dumpVersorModulus(QuatToQuatFn* p, AABB range, int res) {
-    QuatQuatRotField x(p, 0);
-    QuatQuatRotField y(p, 1);
-    QuatQuatRotField z(p, 2);
-    QuatQuatMagField mag(p);
-
-    VirtualGrid3D gx(res, res, res, range.min(), range.max(), &x);
-    gx.writeF3D("temp/x.f3d", true);
-
-    VirtualGrid3D gy(res, res, res, range.min(), range.max(), &y);
-    gy.writeF3D("temp/y.f3d", true);
-
-    VirtualGrid3D gz(res, res, res, range.min(), range.max(), &z);
-    gz.writeF3D("temp/z.f3d", true);
-
-    VirtualGrid3D gm(res, res, res, range.min(), range.max(), &mag);
-    gm.writeCSV("temp/modulus.csv");
-}
+// void dumpVersorModulus(QuatMap* p, AABB range, int res) {
+//     QuatQuatRotField x(p, 0);
+//     QuatQuatRotField y(p, 1);
+//     QuatQuatRotField z(p, 2);
+//     QuatQuatMagField mag(p);
+//
+//     VirtualGrid3D gx(res, res, res, range.min(), range.max(), &x);
+//     gx.writeF3D("temp/x.f3d", true);
+//
+//     VirtualGrid3D gy(res, res, res, range.min(), range.max(), &y);
+//     gy.writeF3D("temp/y.f3d", true);
+//
+//     VirtualGrid3D gz(res, res, res, range.min(), range.max(), &z);
+//     gz.writeF3D("temp/z.f3d", true);
+//
+//     VirtualGrid3D gm(res, res, res, range.min(), range.max(), &mag);
+//     gm.writeCSV("temp/modulus.csv");
+// }
 
 Real GLOBAL_fillLevelGradOffset = 0; // XXX This is kinda hacky because otherwise
                                      // we can't capture the local variable in a
@@ -240,32 +104,6 @@ int main(int argc, char *argv[]) {
     distField.mapBox.min() = VEC3F(-0.5, -0.5, -0.5);
     distField.mapBox.max() = VEC3F(0.5, 0.5, 0.5);
 
-    RationalQuatPoly *p;
-
-    if (string(argv[2]) == "RANDOM") {
-        // Create random polynomial
-        PRINT("Generating random polynomial...");
-        POLYNOMIAL_4D polynomial = randPolynomialInBox(distField.mapBox, 2, 13, 10, false);
-
-        p = new RationalQuatPoly(polynomial);
-    } else {
-        // Load from file
-        PRINT("Loading polynomial from file...");
-        POLYNOMIAL_4D polynomial(argv[2]);
-        p = new RationalQuatPoly(polynomial);
-    }
-
-    // Make temp dir if it doesn't exist
-    if ( mkdir("temp", ACCESSPERMS) != 0 && errno != EEXIST) {
-	PRINT("Error: couldn't create directory ./temp to store polynomials");
-    }
-
-    // Save polynomial info for inspection later (helpful if it was randomly generated)
-    FILE* out = fopen("temp/p.poly4d", "w");
-    p->topPolynomial.write(out);
-    PRINT("Wrote polynomial to temp/p.poly4d");
-    fclose(out);
-
     // Finally we actually compute the Julia set
     Real fillLevel = atof(argv[4]); // This is param alpha in the equation
     Real fillOffset = atof(argv[5]); // This is param beta in the equation
@@ -275,14 +113,11 @@ int main(int argc, char *argv[]) {
     VEC3F offset3D(atof(argv[6]), atof(argv[7]), atof(argv[8]));
 
     distField.mapBox.setCenter(offset3D);
-    for (unsigned int i = 0; i < p->topPolynomial.roots().size(); i++) {
-        p->topPolynomial.rootsMutable()[i] = p->topPolynomial.roots()[i] + offset3D;
-    }
 
     int res = atoi(argv[3]);
 
     // Set up simulation bounds, taking octree zoom into account
-    AABB boundsBox(distField.mapBox.min(), distField.mapBox.max());
+    AABB boundsBox(distField.mapBox.min(), distField.mapBox.max() + VEC3F(0.25, 0.25, 0.25));
     if (argc == 11) { // If an octree specifier string was given, we zoom in on just one box
         char* octreeStr = argv[10];
 
@@ -304,12 +139,26 @@ int main(int argc, char *argv[]) {
 
     PRINTF("Computing Julia set with resolution %d, a=%f, b=%f, offset=(%f, %f, %f)\n", res, fillLevel, fillOffset, offset3D.x(), offset3D.y(), offset3D.z());
 
-    // Make fields for a and b
-    ConstantFunction3D b(fillOffset);
-    VirtualGrid3D(100, 100, 100, VEC3F(0,0,0), VEC3F(1,1,1), &b).writeF3D("field.f3d");
+    NoiseVersor  versor(2, 9);
+    ShapeModulus modulus(&distField, fillLevel, fillOffset);
 
-    DistanceGuidedQuatFn map(&distField, p, fillLevel, fillOffset);
-    QuaternionJuliaSet julia(&map, 3, 20);
+    VersorModulusR3Map vm(&versor, &modulus);
+    R3JuliaSet         mask_j(&vm, 4, 10);
+
+    vector<VEC3F> portalCenters;
+    vector<AngleAxis<Real>> portalRotations;
+
+    // FOR BUNNY EARS:
+    // portalCenters.push_back(VEC3F(-0.375625, 0.488387, -0.304291));
+    // portalCenters.push_back(VEC4F(-0.165835, 0.431125,  0.022875));
+
+    // FOR LUCY:
+    portalCenters.push_back(VEC3F(-0.136833, 0.523046, -0.136833));
+    portalRotations.push_back(AngleAxis<Real>(M_PI/3, VEC3F(0,1,0)));
+    PortalMap  pm(&vm, portalCenters, portalRotations, 0.25, 4.5, &mask_j);
+
+    R3JuliaSet julia(&pm, 10, 20);
+
     VirtualGrid3DLimitedCache vg(res, res, res, boundsBox.min(), boundsBox.max(), &julia);
 
     Mesh m;

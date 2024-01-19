@@ -1,5 +1,5 @@
-#ifndef MC_CPP_INCLUDED
-#define MC_CPP_INCLUDED
+#ifndef MC_H
+#define MC_H
 
 #include <mutex>
 #include <vector>
