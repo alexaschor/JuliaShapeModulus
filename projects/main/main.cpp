@@ -151,10 +151,11 @@ int main(int argc, char *argv[]) {
     // FOR BUNNY EARS:
     // portalCenters.push_back(VEC3F(-0.375625, 0.488387, -0.304291));
     // portalCenters.push_back(VEC3F(-0.165835, 0.431125,  0.022875));
-    portalCenters.push_back(VEC3F(-0.136500, 0.437500, 0.011330));
+    portalCenters.push_back(VEC3F(-0.175255, 0.441722, 0.015167));
     portalRotations.push_back(AngleAxis<Real>(0, VEC3F(0,1,0)));
 
-    portalCenters.push_back(VEC3F(-0.225500, 0.379412, -0.343722));
+
+    portalCenters.push_back(VEC3F(-0.375654, 0.433278, -0.309944));
     portalRotations.push_back(AngleAxis<Real>(0, VEC3F(0,1,0)));
 
     // FOR LUCY:
