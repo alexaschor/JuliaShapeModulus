@@ -150,11 +150,16 @@ int main(int argc, char *argv[]) {
 
     // FOR BUNNY EARS:
     // portalCenters.push_back(VEC3F(-0.375625, 0.488387, -0.304291));
-    // portalCenters.push_back(VEC4F(-0.165835, 0.431125,  0.022875));
+    // portalCenters.push_back(VEC3F(-0.165835, 0.431125,  0.022875));
+    portalCenters.push_back(VEC3F(-0.136500, 0.437500, 0.011330));
+    portalRotations.push_back(AngleAxis<Real>(0, VEC3F(0,1,0)));
+
+    portalCenters.push_back(VEC3F(-0.225500, 0.379412, -0.343722));
+    portalRotations.push_back(AngleAxis<Real>(0, VEC3F(0,1,0)));
 
     // FOR LUCY:
-    portalCenters.push_back(VEC3F(-0.136833, 0.523046, -0.136833));
-    portalRotations.push_back(AngleAxis<Real>(M_PI/3, VEC3F(0,1,0)));
+    // portalCenters.push_back(VEC3F(-0.136833, 0.523046, -0.136833));
+    // portalRotations.push_back(AngleAxis<Real>(M_PI/3, VEC3F(0,1,0)));
     PortalMap  pm(&vm, portalCenters, portalRotations, 0.25, 4.5, &mask_j);
 
     R3JuliaSet julia(&pm, 10, 20);
