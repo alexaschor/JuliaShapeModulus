@@ -325,17 +325,17 @@ public:
     Real scale;
 
     NoiseVersor(uint octaves, Real scale): octaves(octaves), scale(scale) {
-        // nx.reseed(83888u);
-        // ny.reseed(39388u);
-        // nz.reseed(17474u); // Decent
+        nx.reseed(83888u);
+        ny.reseed(39388u);
+        nz.reseed(17474u); // Decent
 
         // nx.reseed(888u);
         // ny.reseed(388u);
         // nz.reseed(174u); // No nose
 
-        nx.reseed(88u);
-        ny.reseed(38u);
-        nz.reseed(14u); // Better
+        // nx.reseed(88u);
+        // ny.reseed(38u);
+        // nz.reseed(14u); // Better
     }
 
     virtual VEC3F getFieldValue(const VEC3F& pos) const override {

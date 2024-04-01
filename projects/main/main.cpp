@@ -160,7 +160,7 @@ int main(int argc, char *argv[]) {
     // portalRotations.push_back(AngleAxis<Real>(M_PI/3, VEC3F(0,1,0)));
 
     // FOR HEBE:
-    portalCenters.push_back(VEC3F(0.143500, 0.350699, 0.126944));
+    portalCenters.push_back(VEC3F(0.140000, 0.350699, 0.126944));
     portalRotations.push_back(AngleAxis<Real>(0, VEC3F(0,1,0)));
 
 
@@ -169,6 +169,7 @@ int main(int argc, char *argv[]) {
     R3JuliaSet julia(&pm, 10, 20);
 
     VirtualGrid3DLimitedCache vg(res, res, res, boundsBox.min(), boundsBox.max(), &julia);
+    // VirtualGrid3DLimitedCache vg(res, res, res, boundsBox.min(), boundsBox.max(), &distField); FOR GETTING ORIG
 
     Mesh m;
     MC::march_cubes(&vg, m, true);
