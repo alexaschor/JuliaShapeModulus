@@ -313,14 +313,30 @@ public:
 
 class NoiseVersor: public R3Map {
 public:
-    siv::PerlinNoise nx{ 1234567u };
-    siv::PerlinNoise ny{ 6543210u };
-    siv::PerlinNoise nz{ 1232101u };
+    // siv::PerlinNoise nx{ 1234567u };
+    // siv::PerlinNoise ny{ 6543210u };
+    // siv::PerlinNoise nz{ 1232101u };
+
+    siv::PerlinNoise nx{ 000u };
+    siv::PerlinNoise ny{ 000u };
+    siv::PerlinNoise nz{ 000u };
 
     uint octaves;
     Real scale;
 
-    NoiseVersor(uint octaves, Real scale): octaves(octaves), scale(scale) {}
+    NoiseVersor(uint octaves, Real scale): octaves(octaves), scale(scale) {
+        // nx.reseed(83888u);
+        // ny.reseed(39388u);
+        // nz.reseed(17474u); // Decent
+
+        // nx.reseed(888u);
+        // ny.reseed(388u);
+        // nz.reseed(174u); // No nose
+
+        nx.reseed(88u);
+        ny.reseed(38u);
+        nz.reseed(14u); // Better
+    }
 
     virtual VEC3F getFieldValue(const VEC3F& pos) const override {
         VEC3F p = pos * scale;

@@ -8,7 +8,16 @@ import os
 # from 8 to however many cores you have on your machine.
 
 NUM_PARALLEL_JOBS = 8
+keep = False
+subsection = ""
 
+if sys.argv[1] == "KEEP":
+    keep = True
+    sys.argv = [sys.argv[0]] + sys.argv[2:]
+
+if sys.argv[1] == "SUB":
+    subsection = sys.argv[2]
+    sys.argv = [sys.argv[0]] + sys.argv[3:]
 
 if len(sys.argv) != 10:
     print("USAGE:")
@@ -29,10 +38,11 @@ out_obj = sys.argv[9]
 
 params = [sdf, p4d, str(int(out_res / 2)), a, b, ox, oy, oz, out_obj]
 
-generate_command = "seq 0 7 | xargs -P" + str(NUM_PARALLEL_JOBS) + " -I{} ./bin/run " + " ".join(params) +  ".{}.obj " + "{}"
-cat_command = f"mesh_cat {out_obj}.*.obj -o {out_obj}"
-rm_command = f"rm {out_obj}.*.obj"
+generate_command = "seq 0 7 | xargs -P" + str(NUM_PARALLEL_JOBS) + " -I{} ./bin/run " + " ".join(params) +  ".{}.obj " + subsection + "{}"
+cat_command      = f"mesh_cat {out_obj}.*.obj -o {out_obj}"
+rm_command       = f"rm {out_obj}.*.obj" if not keep else "echo 'Keeping objs...'"
 
 command = "time (" +generate_command + " && " + cat_command + " && " + rm_command + ")"
+print(command)
 
 os.system(command)
