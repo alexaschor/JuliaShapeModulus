@@ -149,22 +149,22 @@ int main(int argc, char *argv[]) {
     vector<AngleAxis<Real>> portalRotations;
 
     // FOR BUNNY EARS:
-    // portalCenters.push_back(VEC3F(-0.175255, 0.441722, 0.015167));
-    // portalRotations.push_back(AngleAxis<Real>(0, VEC3F(0,1,0)));
-    //
-    // portalCenters.push_back(VEC3F(-0.375654, 0.433278, -0.309944));
-    // portalRotations.push_back(AngleAxis<Real>(0, VEC3F(0,1,0)));
+    portalCenters.push_back(VEC3F(-0.175255, 0.441722, 0.015167));
+    portalRotations.push_back(AngleAxis<Real>(0, VEC3F(0,1,0)));
+
+    portalCenters.push_back(VEC3F(-0.375654, 0.433278, -0.309944));
+    portalRotations.push_back(AngleAxis<Real>(0, VEC3F(0,1,0)));
 
     // FOR LUCY:
     // portalCenters.push_back(VEC3F(-0.136833, 0.523046, -0.136833));
     // portalRotations.push_back(AngleAxis<Real>(M_PI/3, VEC3F(0,1,0)));
 
     // FOR HEBE:
-    portalCenters.push_back(VEC3F(0.140000, 0.350699, 0.126944));
-    portalRotations.push_back(AngleAxis<Real>(0, VEC3F(0,1,0)));
+    // portalCenters.push_back(VEC3F(0.140000, 0.350699, 0.126944));
+    // portalRotations.push_back(AngleAxis<Real>(0, VEC3F(0,1,0)));
 
 
-    PortalMap  pm(&vm, portalCenters, portalRotations, 0.25, 5, &mask_j); //4.5 for bunny
+    PortalMap  pm(&vm, portalCenters, portalRotations, 0.25, 4.5, &mask_j); //5 for hebe
 
     R3JuliaSet julia(&pm, 10, 20);
 
