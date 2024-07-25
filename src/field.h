@@ -552,6 +552,8 @@ private:
     FieldFunction3D *fieldFunction;
     VEC3F functionMin, functionMax;
 
+public:
+
     VEC3F getSamplePoint(Real x, Real y, Real z) const {
         VEC3F gridPointF(x, y, z);
         VEC3F gridResF(xRes, yRes, zRes);
@@ -561,7 +563,6 @@ private:
 
         return samplePoint;
     }
-public:
 
     VirtualGrid3D(uint xRes, uint yRes, uint zRes, VEC3F functionMin, VEC3F functionMax,  FieldFunction3D *fieldFunction):
         fieldFunction(fieldFunction),

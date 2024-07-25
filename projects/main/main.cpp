@@ -1,28 +1,19 @@
-#include <algorithm>
 #include <iostream>
-#include <fstream>
-#include <chrono>
 #include <cstdio>
-#include <limits>
 #include <stdio.h>
-#include <cmath>
-#include <random>
 
 #include <sys/stat.h>
-#include <errno.h>
 
 #include "SETTINGS.h"
 
 #include "MC.h"
 #include "mesh.h"
 #include "field.h"
-#include "Quaternion/QUATERNION.h"
-#include "Quaternion/POLYNOMIAL_4D.h"
+
+#include "TriangleMeshDistance/TriangleMeshDistance.h"
 
 #include "julia.h"
 
-#include <chrono>
-#include <thread>
 
 using namespace std;
 
@@ -166,10 +157,62 @@ int main(int argc, char *argv[]) {
 
     PortalMap  pm(&vm, portalCenters, portalRotations, 0.25, 4.5, &mask_j); //5 for hebe
 
-    R3JuliaSet julia(&pm, 10, 20);
+    R3JuliaSet julia(&pm, 7, std::numeric_limits<double>::max());
 
     VirtualGrid3DLimitedCache vg(res, res, res, boundsBox.min(), boundsBox.max(), &julia);
     // VirtualGrid3DLimitedCache vg(res, res, res, boundsBox.min(), boundsBox.max(), &distField); FOR GETTING ORIG
+
+    Mesh trueSurface;
+    PRINT("Reading obj...");
+    trueSurface.readOBJ("bunny_surface.obj");
+
+    PRINT("Instantiating SDF...");
+
+    tmd::TriangleMeshDistance mesh_distance(trueSurface.vertices, trueSurface.getTriangles());
+
+    PRINT("Instantiated.");
+
+    std::ofstream outfile("distance_estimate_log_i7.csv");
+
+    PB_START("Logging distances...");
+    PB_PROGRESS(0);
+    for (int x=0; x<res; ++x) {
+        for (int y=0; y<res; ++y) {
+            for (int z=0; z<res; ++z) {
+                VEC3F samplePoint = vg.getSamplePoint(x,y,z);
+                Real distance = mesh_distance.signed_distance({samplePoint.x(), samplePoint.y(), samplePoint.z()}).distance;
+                Real mag = julia(samplePoint);
+
+                Real h = 0.01;
+
+                Real sx1 = julia(samplePoint - h*VEC3F(1,0,0));
+                Real sx2 = julia(samplePoint + h*VEC3F(1,0,0));
+
+                Real sy1 = julia(samplePoint - h*VEC3F(0,1,0));
+                Real sy2 = julia(samplePoint + h*VEC3F(0,1,0));
+
+                Real sz1 = julia(samplePoint - h*VEC3F(0,0,1));
+                Real sz2 = julia(samplePoint + h*VEC3F(0,0,1));
+
+                VEC3F grad = VEC3F(sx2 - sx1, sy2 - sy1, sz2 - sz1) * (1.0 / (2*h));
+                Real gradMag = grad.norm();
+
+                Real distanceEstimate1 = mag / gradMag;
+                Real distanceEstimate2 = (mag * log(mag)) / gradMag;
+
+
+                outfile  << samplePoint.x()   << ", " << samplePoint.y()   << ", " << samplePoint.z() << ", "
+                         << distance          << ", " << log(mag)          << ", " << gradMag         << ", "
+                         << distanceEstimate1 << ", " << distanceEstimate2 << "\n";
+            }
+        }
+        PB_PROGRESS((Real) x / res);
+    }
+    PB_END();
+
+    PRINT("DONE");
+
+    exit(0);
 
     Mesh m;
     MC::march_cubes(&vg, m, true);

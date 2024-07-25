@@ -28,6 +28,17 @@ public:
         return indices.size() / 3;
     }
 
+    std::vector<std::array<int, 3>> getTriangles() {
+        std::vector<std::array<int, 3>> out;
+
+        for (int i=0; i < indices.size(); i+=3) {
+            std::array<int, 3> triangle{static_cast<int>(indices[i]), static_cast<int>(indices[i+1]), static_cast<int>(indices[i+2])};
+            out.push_back(triangle);
+        }
+
+        return out;
+    }
+
     //readOBJ function adapted from http://www.opengl-tutorial.org
     void readOBJ(std::string filename) {
         FILE * file = fopen(filename.c_str(), "r");
