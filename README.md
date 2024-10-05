@@ -2,6 +2,10 @@
 
 [![DOI:10.1111/cgf.14905](https://zenodo.org/badge/DOI/10.1111/cgf.14905.svg)](https://doi.org/10.1111/cgf.14905)
 
+> [!TIP]
+> If you have questions or difficulties running the code or getting the aesthetic result you want, make sure to check [this page](https://github.com/alexaschor/JuliaShapeModulus/issues?q=label%3Aquestion) where I've answered questions from others!
+> If those don't answer your question, please open a new issue there! I usually answer posted issues within twenty-four hours.
+
 ## Intro
 
 ![Four intricate fractal shapes in the shape of an armadillo, bunny, dragon, and human hand](https://github.com/alexaschor/JuliaShapeModulus/assets/77604978/9946f6d4-413a-427e-a83d-78d05163340b)
